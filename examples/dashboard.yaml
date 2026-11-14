@@ -1,0 +1,75 @@
+# Dashboard example with sidebar layout
+title: Ops Console
+layout: sidebar
+description: Internal read-only operations dashboard.
+
+theme:
+  accent: "#0ea5e9"
+  radius: "6px"
+
+hero:
+  - type: headline
+    level: 1
+    text: Ops Console
+  - type: paragraph
+    text: A read-only internal dashboard generated from a single YAML file.
+
+nav:
+  - { label: Overview, href: "#s-overview" }
+  - { label: Metrics, href: "#s-metrics" }
+  - { label: Releases, href: "#s-releases" }
+
+sections:
+  - title: Overview
+    content:
+      - type: paragraph
+        text: Environments are reported by their last known state.
+
+  - title: Metrics
+    content:
+      - type: chart
+        kind: line
+        title: Requests / minute
+        caption: Requests per minute by environment (inline row data).
+        data:
+          - label: 09:00
+            series: { prod: 820, staging: 210 }
+          - label: 10:00
+            series: { prod: 940, staging: 230 }
+          - label: 11:00
+            series: { prod: 1180, staging: 260 }
+          - label: 12:00
+            series: { prod: 1020, staging: 240 }
+
+      - type: card
+        title: P99 latency
+        text: 212 ms
+        intent: success
+      - type: card
+        title: Error rate
+        text: 0.04%
+        intent: success
+
+  - title: Releases
+    content:
+      - type: table
+        caption: Recent releases
+        rows:
+          - [Commit, Service, Status]
+          - [f3a9c21, billing-worker, pending]
+          - [b27e01f, api-gateway, deployed]
+          - [9c4d7e0, auth-service, deployed]
+
+  - title: Storage
+    content:
+      - type: chart
+        kind: bar
+        title: Storage used (GB) by team
+        caption: Bar chart with inline data.
+        data:
+          - label: analytics
+            series: { gb: 320 }
+          - label: core
+            series: { gb: 210 }
+          - label: ml
+            series: { gb: 480 }

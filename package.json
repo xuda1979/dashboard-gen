@@ -1,0 +1,19 @@
+{
+  "name": "dashboard-gen",
+  "version": "0.1.0",
+  "description": "Declarative landing-page / read-only dashboard generator from YAML/JSON DSL to a single static HTML/CSS/JS file.",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "dg": "bin/dg"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  }
+}

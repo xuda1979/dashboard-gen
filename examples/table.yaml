@@ -1,0 +1,37 @@
+# Table example: read-only internal tool table
+title: Deployment Status
+layout: landing
+description: Live deployment status table for the platform team.
+
+sections:
+  - title: Services
+    content:
+      - type: table
+        caption: Current deployment status per service
+        rows:
+          - [Service, Version, Status, Owner]
+          - [api-gateway, v2.14.0, healthy, core]
+          - [auth-service, v1.9.2, healthy, identity]
+          - [billing-worker, v0.42.1, degraded, finance]
+          - [web-console, v3.0.0, healthy, frontend]
+          - [data-sync, v1.1.7, down, data]
+
+  - title: Key metrics
+    content:
+      - type: card
+        title: Uptime (30d)
+        text: 99.94%
+        intent: success
+      - type: card
+        title: Deployments
+        text: 217 this quarter
+        intent: primary
+
+  - title: Object-form table
+    content:
+      - type: table
+        caption: Recovery time objective
+        rows:
+          - { Tier: Gold, RTO: 15m, RPO: 5m }
+          - { Tier: Silver, RTO: 1h, RPO: 15m }
+          - { Tier: Bronze, RTO: 24h, RPO: 4h }

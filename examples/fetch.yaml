@@ -1,0 +1,24 @@
+# Fetch example: data loaded at page-open time from a static JSON
+title: Market Data
+layout: landing
+description: Charts that pull their data from a static JSON file at runtime.
+
+sections:
+  - title: Price history (chart)
+    content:
+      - type: chart
+        kind: line
+        title: Widget price (USD)
+        caption: Fetches market.json at open. Serve over HTTP; CORS must allow the host.
+        data:
+          fetch: market.json
+        start: 2024-01-01
+
+  - title: Allocation (chart)
+    content:
+      - type: chart
+        kind: pie
+        title: Portfolio allocation
+        caption: Also loaded via fetch at runtime.
+        data:
+          fetch: market.json

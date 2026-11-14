@@ -1,0 +1,8 @@
+[
+  { "label": "2024-01", "series": { "price": 120 } },
+  { "label": "2024-02", "series": { "price": 132 } },
+  { "label": "2024-03", "series": { "price": 128 } },
+  { "label": "2024-04", "series": { "price": 145 } },
+  { "label": "2024-05", "series": { "price": 158 } },
+  { "label": "2024-06", "series": { "price": 172 } }
+]

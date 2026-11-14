@@ -1,0 +1,73 @@
+# Landing page example
+title: Acme Analytics — Ship Analytics Faster
+layout: landing
+description: A landing page demo for dashboard-gen.
+theme:
+  accent: "#7c3aed"
+  radius: "10px"
+
+hero:
+  - type: headline
+    level: 1
+    text: "Your data, shipped in one YAML file"
+  - type: paragraph
+    text: |
+      dashboard-gen turns a declarative YAML model into a single self-contained
+      HTML file. No CDN, no build step, no vendor lock-in.
+  - type: button
+    text: Get Started
+    href: "#feature-grid"
+    style: primary
+  - type: button
+    text: View on GitHub
+    href: "https://github.com/xuda1979/dashboard-gen"
+    style: subtle
+    newtab: true
+
+sections:
+  - title: Feature grid
+    content:
+      - type: card
+        title: Declarative
+        text: Describe your page in YAML; the generator handles the rest.
+        intent: primary
+      - type: card
+        title: Zero-dependency
+        text: The output is a single HTML file. Open it offline in any browser.
+        intent: success
+      - type: card
+        title: Accessible
+        text: ARIA labels, semantic landmarks, and a contrast-friendly palette.
+        intent: warning
+
+  - title: Pricing
+    content:
+      - type: grid
+        columns: 3
+        items:
+          - card:
+              title: Hobby
+              text: $0 forever
+          - card:
+              title: Pro
+              text: $20 / month
+          - card:
+              title: Enterprise
+              text: Contact sales
+
+  - title: FAQ
+    content:
+      - type: headline
+        level: 3
+        text: "Is it really offline?"
+      - type: paragraph
+        text: Yes — the generated page inlines all CSS and chart logic.
+      - type: headline
+        level: 3
+        text: "Can I use JSON instead of YAML?"
+      - type: paragraph
+        text: Sure. Point the generator at a .json file with the same schema.
+      - type: link
+        text: Read the docs
+        href: "https://github.com/xuda1979/dashboard-gen"
+        style: button

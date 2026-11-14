@@ -1,0 +1,61 @@
+# Chart example: line + bar + pie with inline data (no external chart library)
+title: Traffic & Revenue
+layout: landing
+description: Local SVG charts rendered with zero dependencies.
+
+theme:
+  fontVariant: normal
+
+sections:
+  - title: Daily active users
+    content:
+      - type: chart
+        kind: line
+        title: DAU this week
+        caption: Seven-day rolling dashboard users. Line chart rendered as inline SVG.
+        data:
+          - label: Mon
+            series: { you: 120, competitors: 60 }
+          - label: Tue
+            series: { you: 170, competitors: 75 }
+          - label: Wed
+            series: { you: 210, competitors: 90 }
+          - label: Thu
+            series: { you: 190, competitors: 88 }
+          - label: Fri
+            series: { you: 260, competitors: 105 }
+          - label: Sat
+            series: { you: 320, competitors: 120 }
+          - label: Sun
+            series: { you: 340, competitors: 130 }
+
+  - title: Revenue by quarter
+    content:
+      - type: chart
+        kind: bar
+        title: Quarterly revenue (k$)
+        caption: Bar chart rendered as inline SVG.
+        data:
+          - label: Q1
+            series: { revenue: 42 }
+          - label: Q2
+            series: { revenue: 61 }
+          - label: Q3
+            series: { revenue: 77 }
+          - label: Q4
+            series: { revenue: 95 }
+
+  - title: Traffic sources
+    content:
+      - type: chart
+        kind: pie
+        title: Share of traffic
+        caption: Pie chart rendered as inline SVG.
+        data:
+          - label: sources
+            series: { Organic: 45, Direct: 30, Referral: 15, Social: 10 }
+        swatches:
+          Organic: "#16a34a"
+          Direct: "#2563eb"
+          Referral: "#d97706"
+          Social: "#dc2626"
