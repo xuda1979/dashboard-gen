@@ -206,6 +206,39 @@ test('dg build finds a default DSL source when no arg is given', () => {
   }
 });
 
+test('dg build resolves alternate default DSL candidates', () => {
+  // defaultSource() accepts dg.dsl.yaml, dg.dsl.yml, dg.dsl.json, or site.yaml
+  // when no src arg is passed. Pin the non-primary candidates so the documented
+  // "point dg build at the DSL file" contract works for any of the four names.
+  const os = require('node:os');
+  const { cmdBuild } = require('../lib/cli');
+  const candidates = [
+    ['dg.dsl.yml', 'title: yml-dot\nsections: []\n'],
+    ['dg.dsl.json', JSON.stringify({ title: 'json-dot', sections: [] })],
+    ['site.yaml', 'title: site-dot\nsections: []\n'],
+  ];
+  for (const [file, source] of candidates) {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-alt-'));
+    fs.writeFileSync(path.join(tmp, file), source);
+    const origCwd = process.cwd();
+    process.chdir(tmp);
+    try {
+      cmdBuild({ _: [] });
+      // All four candidates map to the site name "site", so the output lands at
+      // dist/site.html regardless of which default candidate was discovered.
+      const out = path.join(tmp, 'dist', 'site.html');
+      assert.ok(fs.existsSync(out), `${file} discovered and built`);
+      assert.match(
+        fs.readFileSync(out, 'utf8'),
+        file === 'dg.dsl.yml' ? /yml-dot/ : file === 'dg.dsl.json' ? /json-dot/ : /site-dot/,
+        `${file} content rendered`
+      );
+    } finally {
+      process.chdir(origCwd);
+    }
+  }
+});
+
 test('dg build with a missing DSL arg fails with an error', () => {
   // A missing DSL file raises a ParseError deep in ensureArg. The CLI entry
   // point must surface it as a clean "[dashboard-gen] DSL file not found: ..."
@@ -1066,6 +1099,26 @@ test('dg new defaults to the landing template and the scaffold builds', () => {
     const html = fs.readFileSync(path.join(cwd, 'dist', 'site.html'), 'utf8');
     assert.match(html, /<section class="dg-section">/, 'landing renders stacked sections');
     assert.match(html, /Your data, shipped in one YAML file/, 'hero headline rendered');
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
+test('dg new with no name scaffolds into the default "site" dir', () => {
+  // `dg new` without a name argument resolves to the "site" project directory,
+  // matching the documented default output dist/site.html for dg.dsl.yaml.
+  const os = require('node:os');
+  const { cmdNew } = require('../lib/cli');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-nodefault-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    cmdNew({ _: [] });
+    const dslPath = path.join(cwd, 'site', 'dg.dsl.yaml');
+    assert.ok(fs.existsSync(dslPath), 'default "site" project scaffolded');
+    const pkgName = JSON.parse(fs.readFileSync(path.join(cwd, 'site', 'package.json'), 'utf8')).name;
+    assert.strictEqual(pkgName, 'site-site', 'package name derives from the default site name');
+    assert.ok(fs.existsSync(path.join(cwd, 'site', '.github', 'workflows', 'pages.yml')));
   } finally {
     process.chdir(origCwd);
   }
