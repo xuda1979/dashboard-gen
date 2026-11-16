@@ -2325,3 +2325,28 @@ test('table object rows render union-of-keys header and cells', () => {
   );
 });
 
+test('empty or absent table rows render a no-data note instead of a hollow table', () => {
+  // An empty rows list has no header and no body, so a bare <table> with an
+  // empty <tbody> (or nothing at all) would be an invisible hollow element.
+  // Match the chart runtime: emit the no-data note only.
+  for (const rows of [[], undefined]) {
+    const html = renderHtml({
+      title: 't',
+      sections: [{ content: [{ type: 'table', rows }] }],
+    });
+    assert.match(
+      html,
+      /<p class="dg-note">No data to draw\.<\/p>/,
+      `empty table (rows=${JSON.stringify(rows)}) shows the no-data note`
+    );
+    assert.ok(
+      !/<table class="dg-table"><tbody>/.test(html),
+      `empty table (rows=${JSON.stringify(rows)}) renders no hollow table`
+    );
+    assert.ok(
+      !/<td>/.test(html) && !/<th>/.test(html),
+      `empty table (rows=${JSON.stringify(rows)}) renders no cells`
+    );
+  }
+});
+
