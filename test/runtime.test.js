@@ -808,3 +808,32 @@ test('runtime narrows bars below the 36px cap when many categories crowd the plo
   assert.ok(Math.max(...xs) + Math.max(...widths) <= 740, 'last bar ends inside the plot (no overflow)');
   assert.ok(out.includes('>A</text>') && out.includes('>P</text>'), 'x-axis labels span first and last category');
 });
+
+test('runtime coerces non-numeric pie values to zero and skips empty-label rows', () => {
+  // Slice sources have two guardrails: a row with an empty/null label must not
+  // become a slice (render.js keeps the legend readable), and a non-numeric
+  // series value coerces to 0 (Number(...) || 0) so it is filtered out rather
+  // than leaking NaN into the paths.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: pie\n        title: Rows\n        data:\n          - { label: A, series: { x: 10 } }\n          - { label: "", series: { y: 5 } }\n          - { label: null, series: { z: 7 } }\n      - type: chart\n        kind: pie\n        title: Map\n        data:\n          - label: Q1\n            series: { Good: 10, Bad: nope }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'Rows' },
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-1', 'data-chart-title': 'Map' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [{ label: 'A', series: { x: 10 } }, { label: '', series: { y: 5 } }, { label: null, series: { z: 7 } }],
+    'chart-1': [{ label: 'Q1', series: { Good: 10, Bad: 'nope' } }],
+  });
+  const rowsOut = figureEls[0].innerHTML;
+  assert.strictEqual((rowsOut.match(/class="dg-slice"/g) || []).length, 1, 'only the labelled row draws a slice');
+  assert.ok(rowsOut.includes('>A</span>'), 'surviving slice keeps its legend name');
+  assert.ok(rowsOut.includes('<title>A: 10 (100.0%)</title>'), 'the slice title carries the full share');
+  const mapOut = figureEls[1].innerHTML;
+  assert.strictEqual((mapOut.match(/class="dg-slice"/g) || []).length, 1, 'non-numeric series key coerced to 0 and filtered');
+  assert.ok(mapOut.includes('Good 100.0%'), 'numeric key keeps its full share');
+  assert.ok(!mapOut.includes('Bad'), 'non-numeric key absent from slices and legend');
+  assert.ok(!rowsOut.includes('NaN') && !mapOut.includes('NaN'), 'no NaN leaks into either pie');
+});
