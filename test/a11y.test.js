@@ -94,6 +94,29 @@ test('a11y-check fails with diagnostics on a page missing main/nav/skip', () => 
   assert.match(res.stderr, /<img> missing alt:/);
 });
 
+test('a11y-check fails when a single <main> lacks the id="main" anchor', () => {
+  // The skip link and the keyboard-contract depend on the one main landmark
+  // carrying id="main". A page with exactly one <main> that omits the id must
+  // fail with the missing-id diagnostic (the count check alone can't catch it).
+  const page = `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main>${Array.from({ length: 20 }, (_, i) => `<p>row ${i}</p>`).join('\n')}</main>
+</body>
+</html>`;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-mainid-'));
+  const file = path.join(tmp, 'noid.html');
+  fs.writeFileSync(file, page);
+  const res = runCheck(file);
+  assert.strictEqual(res.ok, false, 'expected failure');
+  assert.strictEqual(res.code, 1, 'exit code 1');
+  assert.match(res.stderr, /<main> missing id="main"/, 'reports the missing anchor');
+  assert.ok(!/expected exactly one <main>/.test(res.stderr), 'the count check itself still passes');
+});
+
 test('a11y-check fails when the page theme has insufficient contrast', () => {
   // theme pair #ffffff on #f5f5f5 computes ~1.1:1, far below the AA 4.5:1
   // threshold for body text, so the lint must fail with the measured ratio.
