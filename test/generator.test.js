@@ -449,8 +449,8 @@ test('stat delta renders neutral for numeric without tone and honors bad tone', 
       ],
     }],
   });
-  assert.match(html, /class="dg-stat-delta"[^>]*>▼ -8</); // neutral
-  assert.match(html, /class="dg-stat-delta dg-stat-delta--bad"[^>]*>▼ -0.5</);
+  assert.match(html, /class="dg-stat-delta"[^>]*>▼ 8</); // neutral, arrow carries the sign
+  assert.match(html, /class="dg-stat-delta dg-stat-delta--bad"[^>]*>▼ 0.5</);
 });
 
 test('invalid chart data shape raises StyleError', () => {
