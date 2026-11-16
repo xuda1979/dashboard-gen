@@ -455,6 +455,47 @@ test('dg build pointing at a directory fails cleanly instead of an EISDIR stack'
   }
 });
 
+test('dg build fails cleanly when the output path is a directory, not a file', () => {
+  // A directory squatting on dist/<name>.html would make writeFileSync throw a
+  // raw EISDIR stack; buildOne must reject it with the same one-line
+  // DashboardError style used for a directory DSL source. Watch shares buildOne
+  // via runBuild, so it must surface the same clean diagnostic.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-outdir-'));
+  fs.writeFileSync(path.join(tmp, 'site.yaml'), 'title: t\nsections: []\n');
+  fs.mkdirSync(path.join(tmp, 'dist', 'site.html'), { recursive: true });
+
+  const { cli, watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origWrite = process.stderr.write;
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  process.chdir(tmp);
+  let errMsg = '';
+  process.stderr.write = (s) => { errMsg += String(s); return true; };
+  console.error = (s) => { errMsg += String(s); };
+  let watcher;
+  try {
+    cli(['build', 'site.yaml']);
+    assert.match(errMsg, /Output path is a directory, not a file: dist\/site\.html/);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on a directory output path');
+    assert.ok(!/EISDIR|\bat /.test(errMsg), 'no raw fs stack trace leaks through');
+
+    errMsg = '';
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    watcher = watch(path.resolve('site.yaml'));
+    assert.match(errMsg, /Output path is a directory, not a file: dist\/site\.html/);
+    assert.ok(!/EISDIR|\bat /.test(errMsg), 'watch reports the same clean diagnostic');
+    assert.strictEqual(process.exitCode, 1, 'watch sets a failing exit code too');
+  } finally {
+    process.stderr.write = origWrite;
+    console.error = origErr;
+    if (watcher) watcher.close();
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Accessibility + no-external-resource (AC2/AC5 invariants on every example)
 // ---------------------------------------------------------------------------
