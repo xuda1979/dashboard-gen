@@ -154,6 +154,30 @@ test('runtime shows no-data note when chart has empty data', () => {
   assert.ok(figureEls[0].innerHTML.includes('No data to draw'), 'shows no-data note');
 });
 
+test('runtime treats explicit empty array data as no-data for every chart kind', () => {
+  // data: [] parses fine (toPoints returns empty points/series, never throws).
+  // Every kind must show the no-data note instead of a hollow chart shell or a
+  // misleading "parse failed" error, so line/bar/pie degrade identically.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: L\n        data: []\n      - type: chart\n        kind: bar\n        title: B\n        data: []\n      - type: chart\n        kind: pie\n        title: P\n        data: []',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const figs = [
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'L' },
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-1', 'data-chart-title': 'B' },
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-2', 'data-chart-title': 'P' },
+  ];
+  const { dom, figureEls } = makeDom(figs);
+  runRuntime(code, dom, { 'chart-0': [], 'chart-1': [], 'chart-2': [] });
+  figureEls.forEach((el, i) => {
+    assert.ok(el.innerHTML.includes('No data to draw'), `kind ${['line', 'bar', 'pie'][i]} shows no-data note`);
+    assert.ok(!el.innerHTML.includes('Chart data parse failed'), `kind ${['line', 'bar', 'pie'][i]} is not a parse error`);
+    assert.ok(!el.innerHTML.includes('<svg'), `kind ${['line', 'bar', 'pie'][i]} renders no hollow svg`);
+    assert.ok(!el.innerHTML.includes('NaN'), `kind ${['line', 'bar', 'pie'][i]} leaks no NaN`);
+  });
+});
+
 test('runtime honors numeric start as the line chart baseline', () => {
   // `start` is documented on the chart component. It was parsed into
   // data-chart-start but never applied; a numeric value must pin the y-axis
