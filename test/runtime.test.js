@@ -283,3 +283,51 @@ test('runtime extracts fetch specs and attempts fetch for missing data', async (
   await new Promise((r) => setTimeout(r, 0));
   assert.strictEqual(fetched, 'market.json');
 });
+
+test('runtime shows a load error when a fetched chart fails', async () => {
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'fetch.yaml'), 'utf8');
+  const html = buildFromSource(src, 'fetch.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Price' },
+  ]);
+  const { window } = await (async () => {
+    const w = {
+      document: dom,
+      console,
+      fetch: () => Promise.reject(new Error('network down')),
+      Promise,
+      setTimeout,
+      clearTimeout,
+    };
+    w.window = w;
+    w.__DG_DATA__ = {};
+    return { window: w };
+  })();
+  const fn = new Function('window', 'document', 'fetch', code);
+  fn.call(window, window, dom, window.fetch);
+  await new Promise((r) => setTimeout(r, 0));
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('Failed to load chart data'), 'fetch failure surfaces an error message');
+  assert.ok(out.includes('network down'), 'error detail is incorporated');
+  assert.ok(out.includes('dg-error'), 'error is marked with the dg-error class');
+});
+
+test('runtime shows a parse error when chart data is malformed', () => {
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  // A null row makes the shape walker throw (Object.keys on null), which
+  // renderOne reports as a parse failure instead of rendering garbage.
+  const data = { 'chart-0': [null] };
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Broken' },
+  ]);
+  runRuntime(code, dom, data);
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('Chart data parse failed'), 'malformed data surfaces a parse error');
+  assert.ok(out.includes('dg-error'), 'parse failure is marked with the dg-error class');
+});
