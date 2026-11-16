@@ -22,6 +22,39 @@ function runCheck(htmlFile) {
   }
 }
 
+test('a11y-check without a file argument exits with a usage error', () => {
+  // The README-documented invocation requires an <html> path; calling it bare
+  // must fail with exit code 2 and print usage, not hang or crash.
+  let stdout = '';
+  let code = null;
+  try {
+    stdout = execFileSync(process.execPath, [SCRIPT], { encoding: 'utf8' });
+  } catch (err) {
+    code = err.status;
+    stdout += String(err.stderr || '') + String(err.stdout || '');
+  }
+  assert.strictEqual(code, 2, 'missing arg exits 2');
+  assert.match(stdout, /usage: .*a11y-check\.mjs <html>/);
+});
+
+test('a11y-check reports an unreadable file cleanly instead of a stack trace', () => {
+  // A bad path must produce a one-line diagnostic from the tool (file error),
+  // not a raw Node ENOENT stack trace, and exit code 1.
+  let stderr = '';
+  let code = null;
+  try {
+    execFileSync(process.execPath, [SCRIPT, path.join(os.tmpdir(), 'dg-no-such-file.html')], {
+      encoding: 'utf8',
+    });
+  } catch (err) {
+    code = err.status;
+    stderr += String(err.stderr || '') + String(err.stdout || '');
+  }
+  assert.strictEqual(code, 1, 'unreadable file exits 1');
+  assert.match(stderr, /\[a11y-check\] cannot read /, 'reports a clean diagnostic');
+  assert.ok(!/^\s+at |\bnode:fs:\d+/.test(stderr), 'no raw Node stack trace leaks out');
+});
+
 test('a11y-check passes on a generated page (chart example)', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'chart.yaml'), 'utf8');
   const html = buildFromSource(src, 'chart.yaml', { fileDir: 'examples' });

@@ -23,7 +23,13 @@ if (!file) {
   process.exit(2);
 }
 
-const html = readFileSync(resolve(file), 'utf8');
+let html;
+try {
+  html = readFileSync(resolve(file), 'utf8');
+} catch (err) {
+  console.error(`[a11y-check] cannot read ${file}: ${err.message}`);
+  process.exit(1);
+}
 const problems = [];
 const warnings = [];
 
