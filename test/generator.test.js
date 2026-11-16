@@ -186,6 +186,58 @@ test('dg build honors the DG_OUTPUT filename override', () => {
   }
 });
 
+test('dg build finds a default DSL source when no arg is given', () => {
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-default-'));
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), 'title: auto\nsections: []\n');
+
+  const { cmdBuild } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    cmdBuild({ _: [] });
+    // dg.dsl.yaml names the site "site" (dg.dsl -> site), so the default
+    // source detection builds dist/site.html even with no argv arg.
+    const out = path.join(tmp, 'dist', 'site.html');
+    assert.ok(fs.existsSync(out), 'default build output written');
+    assert.ok(fs.readFileSync(out, 'utf8').includes('auto'));
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
+test('dg build with a missing DSL arg fails with an error', () => {
+  // A missing DSL file raises a ParseError deep in ensureArg. The CLI entry
+  // point must surface it as a clean "[dashboard-gen] DSL file not found: ..."
+  // line with exit code 1 (not an uncaught stack trace).
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-missing-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+
+  const origWrite = process.stderr.write;
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  let msg = '';
+  let errMsg = '';
+  process.stderr.write = (s) => { errMsg += String(s); return true; };
+  console.error = (s) => { msg += String(s); };
+  try {
+    cli(['build', 'nope.yaml']);
+    assert.match(errMsg, /DSL file not found: nope\.yaml/);
+    assert.ok(!errMsg.includes('ParseError'), 'no raw stack trace leaks through');
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on missing DSL');
+  } finally {
+    process.stderr.write = origWrite;
+    console.error = origErr;
+    // Note: `delete process.exitCode` does NOT reset the code (it stays 1), so
+    // an undefined-origin code must be restored by assigning 0 explicitly.
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Accessibility + no-external-resource (AC2/AC5 invariants on every example)
 // ---------------------------------------------------------------------------
