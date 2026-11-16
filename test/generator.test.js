@@ -302,6 +302,25 @@ test('extended components (badge, divider, quote) render', () => {
   assert.match(html, /— Steve Jobs/);
 });
 
+test('headline id and list ordered render their documented fields', () => {
+  // README component table: headline takes `id` (anchor) and list takes
+  // `ordered` (ordered vs bullet list). Both were untested.
+  const doc = {
+    title: 'misc',
+    sections: [{
+      content: [
+        { type: 'headline', text: 'Jump head', id: 'jump', level: 3 },
+        { type: 'list', items: ['a', 'b'], ordered: true },
+        { type: 'list', items: ['x', 'y'] },
+      ],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<h3 id="jump" class="dg-headline dg-h3">Jump head<\/h3>/);
+  assert.match(html, /<ol class="dg-ol"><li>a<\/li><li>b<\/li><\/ol>/);
+  assert.match(html, /<ul class="dg-ul"><li>x<\/li><li>y<\/li><\/ul>/);
+});
+
 test('sidebar layout renders aside sidebar from first section nav widget', () => {
   const doc = {
     title: 'side',
