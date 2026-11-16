@@ -1781,6 +1781,26 @@ test('dg new with no name scaffolds into the default "site" dir', () => {
   }
 });
 
+test('dg new strips a .yaml extension from the project name', () => {
+  // `dg new site.yaml` must scaffold into "site/" (not a "site.yaml/" dir with
+  // a dot in its name): cmdNew strips the last extension before resolving the
+  // output directory and derives the package name from the cleaned name.
+  const os = require('node:os');
+  const { cmdNew } = require('../lib/cli');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-ext-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    cmdNew({ _: ['site.yaml'] });
+    assert.ok(fs.existsSync(path.join(cwd, 'site', 'dg.dsl.yaml')), 'scaffold lands in the stripped-name dir');
+    assert.ok(!fs.existsSync(path.join(cwd, 'site.yaml')), 'no dotted directory is created');
+    const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'site', 'package.json'), 'utf8'));
+    assert.strictEqual(pkg.name, 'site-site', 'package name comes from the stripped name');
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 test('dg new --template=<t> is accepted', () => {
   const { cmdNew } = require('../lib/cli');
   const os = require('node:os');
