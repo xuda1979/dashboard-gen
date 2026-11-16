@@ -144,6 +144,20 @@ test('runtime renders multi-row pie data as slices', () => {
   assert.strictEqual((out.match(/class="dg-slice"/g) || []).length, 2, 'one slice per row');
   assert.ok(out.includes('core 60.0%') && out.includes('edge 40.0%'), 'slice labels show computed shares');
   assert.ok(out.includes('<svg'), 'pie produced svg');
+
+  // Pie chrome: the flex wrapper, the pie-sized svg root with viewBox and
+  // accessible name, per-slice <title> tooltips, dg-label percent texts, and a
+  // legend naming every slice with a color swatch.
+  assert.ok(out.includes('<div class="dg-pie-flex">'), 'pie wrapped in a flex row');
+  assert.ok(/<svg class="dg-svg dg-svg-pie" viewBox="0 0 240 240" role="img" aria-label="Occupancy pie chart"/.test(out),
+    'pie svg root carries class, viewBox, role and aria-label');
+  const tips = out.match(/<title>[^<]*<\/title>/g) || [];
+  assert.strictEqual(tips.length, 2, 'one title tooltip per slice');
+  assert.ok(out.includes('<title>core: 12 (60.0%)</title>'), 'core tooltip names label, value and share');
+  assert.ok(out.includes('<title>edge: 8 (40.0%)</title>'), 'edge tooltip names label, value and share');
+  assert.ok((out.match(/class="dg-label"/g) || []).length === 2, 'slice percent labels rendered');
+  assert.ok(out.includes('>core</span>') && out.includes('>edge</span>'), 'legend names every slice');
+  assert.ok(out.includes('class="dg-legend-swatch" style="background:#'), 'pie legend swatches carry colors');
 });
 
 test('runtime renders pie from [label, value] array rows', () => {
