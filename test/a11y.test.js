@@ -132,3 +132,58 @@ test('a11y-check checks the dark theme palette against AA too', () => {
   assert.strictEqual(resGood.ok, true, 'compliant dark palette passes');
   assert.match(resGood.stdout, /contrast \(dark\): \d+\.\d+:1/, 'dark ratio reported');
 });
+
+test('a11y-check warns (not fails) on heading skips, external assets, and non-hex tokens', () => {
+  // Beyond the hard problems the lint also emits advisory notes: heading-level
+  // skips, any external script/style/img resource (offline requirement), and a
+  // theme token that is not a hex color (cannot be measured). None of these
+  // may fail the page — the exit code must stay 0 with the notes on stdout.
+  const writePage = (body, headExtra) => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-warn-'));
+    const file = path.join(tmp, 'warn.html');
+    fs.writeFileSync(
+      file,
+      `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title>${headExtra || ''}</head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main">${body}</main>
+</body>
+</html>`
+    );
+    return file;
+  };
+
+  // h2 followed directly by h4 skips a level; warning only.
+  const skip = writePage('<h2>Top</h2><h4>Skipped</h4>');
+  const resSkip = runCheck(skip);
+  assert.strictEqual(resSkip.ok, true, 'heading skip does not fail the page');
+  assert.match(resSkip.stdout, /heading level skip from h2 to h4/, 'reports the skipped level');
+
+  // A page that pulls in external css/js (the offline requirement) passes with a note.
+  const ext = writePage('<h2>Top</h2>', '<link rel="stylesheet" href="base.css"><script src="app.js"></script>');
+  const resExt = runCheck(ext);
+  assert.strictEqual(resExt.ok, true, 'external assets do not fail the page');
+  assert.match(resExt.stdout, /found external script\/style\/img resource/, 'notes the offline requirement');
+
+  // Non-hex theme tokens cannot be measured for contrast — note, not failure.
+  const src =
+    'title: t\n' +
+    'theme:\n' +
+    '  pageBg: white\n' +
+    '  textColor: black\n' +
+    'sections:\n' +
+    '  - title: S\n' +
+    '    content:\n' +
+    '      - type: paragraph\n' +
+    '        text: hi\n';
+  const html = buildFromSource(src, 'named-colors.yaml');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-named-'));
+  const file = path.join(tmp, 'named.html');
+  fs.writeFileSync(file, html);
+  const resNamed = runCheck(file);
+  assert.strictEqual(resNamed.ok, true, 'named-color theme tokens pass the lint');
+  assert.match(resNamed.stdout, /tokens not hex \(page-bg=white text-color=black\)/, 'reports the unmeasurable pair');
+});
