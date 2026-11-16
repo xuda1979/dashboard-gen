@@ -2130,6 +2130,59 @@ test('build copies flat fixtures, mirrors fixture directories, and skips absolut
   }
 });
 
+test('build copies a flat root-level fetch fixture next to the page', () => {
+  // The flat branch of copyLocalFixtures (a fetch URL with no path separator)
+  // was the only fixture kind not pinned: it copies the file next to the page
+  // root instead of mirroring a subpath or recursing a directory. A "./"-prefixed
+  // relative URL must land flat too (the prefix is stripped before matching).
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-flat-'));
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), [
+    'title: t',
+    'sections:',
+    '  - content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: A',
+    '        data: { fetch: "market.json" }',
+    '      - type: chart',
+    '        kind: line',
+    '        title: B',
+    '        data: { fetch: "./rates.json" }',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(tmp, 'market.json'), '[]');
+  fs.writeFileSync(path.join(tmp, 'rates.json'), '[]');
+
+  const { cmdBuild } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    cmdBuild({ _: ['dg.dsl.yaml'] });
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'market.json')),
+      'flat fixture copied to the page root'
+    );
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'rates.json')),
+      '"./"-prefixed flat fixture copied to the page root'
+    );
+    assert.ok(
+      !fs.existsSync(path.join(tmp, 'dist', 'market', 'market.json')),
+      'no spurious subdirectory created for a flat URL'
+    );
+    const html = fs.readFileSync(path.join(tmp, 'dist', 'site.html'), 'utf8');
+    assert.match(
+      html,
+      /"url":"market\.json"|"market\.json"/,
+      'flat URL kept in the runtime manifest'
+    );
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Component coverage: paragraph, grid, quote, divider
 // ---------------------------------------------------------------------------
