@@ -1562,6 +1562,35 @@ test('dg new with an unknown template fails and scaffolds nothing', () => {
   }
 });
 
+test('dg new refuses to overwrite an existing directory', () => {
+  // `dg new <name>` must not clobber a directory that is already there (the
+  // name may hold real work); it fails with a hint and leaves every file alone.
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-exist-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  fs.mkdirSync(path.join(cwd, 'taken'));
+  fs.writeFileSync(path.join(cwd, 'taken', 'keep.txt'), 'do not touch');
+
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  let errMsg = '';
+  console.error = (s) => { errMsg += String(s); };
+  try {
+    cli(['new', 'taken']);
+    assert.match(errMsg, /Directory "taken" already exists\./);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 when the dir exists');
+    assert.strictEqual(fs.readFileSync(path.join(cwd, 'taken', 'keep.txt'), 'utf8'), 'do not touch', 'existing contents untouched');
+    assert.ok(!fs.existsSync(path.join(cwd, 'taken', 'dg.dsl.yaml')), 'no scaffold files written');
+    assert.ok(!fs.existsSync(path.join(cwd, 'taken', 'package.json')), 'no package.json injected');
+  } finally {
+    console.error = origErr;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('unknown CLI command fails with an error', () => {
   // The dispatch default prints an unknown-command error plus help text.
   const { cli } = require('../lib/cli');
