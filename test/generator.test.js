@@ -1124,6 +1124,19 @@ test('page-level nav renders a labelled nav from { label, href } items', () => {
   assert.ok(html.indexOf('dg-navlink') < html.indexOf('<main'), 'nav precedes the main landmark');
 });
 
+test('explicit nav item label and href fall backs', () => {
+  // A page-level `nav:` item may omit the label (the href text is used instead)
+  // or the href (falls back to "#"); both still render a dg-navlink.
+  const doc = {
+    title: 'nav-fb',
+    nav: [{ href: '#docs' }, { label: 'Home' }],
+    sections: [],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<li><a class="dg-navlink" href="#docs">#docs<\/a><\/li>/);
+  assert.match(html, /<li><a class="dg-navlink" href="#">Home<\/a><\/li>/);
+});
+
 test('page-level nav auto-links section titles when no nav key is given', () => {
   // Without `nav:`, the labelled <nav> is still emitted, one link per section,
   // pointing at the slugified section anchor each section renders.
