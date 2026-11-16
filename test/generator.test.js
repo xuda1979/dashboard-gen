@@ -164,6 +164,28 @@ test('watch mode honors DG_OUTPUT filename override', () => {
   }
 });
 
+test('dg build honors the DG_OUTPUT filename override', () => {
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-out-'));
+  fs.writeFileSync(path.join(tmp, 'site.yaml'), 'title: out\nsections: []\n');
+
+  const { cmdBuild } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origOut = process.env.DG_OUTPUT;
+  process.env.DG_OUTPUT = 'index.html';
+  process.chdir(tmp);
+  try {
+    cmdBuild({ _: ['site.yaml'] });
+    assert.ok(fs.existsSync(path.join(tmp, 'dist', 'index.html')), 'DG_OUTPUT file built');
+    assert.ok(!fs.existsSync(path.join(tmp, 'dist', 'site.html')), 'default name not written');
+    assert.ok(fs.readFileSync(path.join(tmp, 'dist', 'index.html'), 'utf8').includes('out'));
+  } finally {
+    if (origOut === undefined) delete process.env.DG_OUTPUT;
+    else process.env.DG_OUTPUT = origOut;
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Accessibility + no-external-resource (AC2/AC5 invariants on every example)
 // ---------------------------------------------------------------------------
