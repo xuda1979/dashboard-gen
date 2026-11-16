@@ -403,6 +403,25 @@ test('hero layout renders sections as hero columns', () => {
   assert.match(html, /Supporting text/);
 });
 
+test('section hero renders as a sub-hero strip above content', () => {
+  // README: sections may carry `hero:` (a sub-hero strip) in addition to
+  // `content:`; under the default landing layout it renders inside the section
+  // as a dg-hero-sub strip, before the section content.
+  const doc = {
+    title: 'subhero',
+    sections: [{
+      hero: [{ type: 'headline', level: 2, text: 'Spotlight' }],
+      content: [{ type: 'paragraph', text: 'Body copy' }],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<section class="dg-section">/);
+  assert.match(html, /class="dg-hero dg-hero-sub"/);
+  assert.ok(html.indexOf('dg-hero dg-hero-sub') < html.indexOf('Body copy'), 'sub-hero strip precedes section content');
+  assert.match(html, /Spotlight/);
+  assert.match(html, /Body copy/);
+});
+
 test('unknown component type raises readable error', () => {
   const doc = { title: 'x', sections: [{ content: [{ type: 'nope' }] }] };
   assert.throws(
