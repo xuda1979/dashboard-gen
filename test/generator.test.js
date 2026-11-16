@@ -1571,6 +1571,72 @@ test('table numeric first row is body data by default, header:true forces it', (
   );
 });
 
+// ---------------------------------------------------------------------------
+// Fetch URL validation (lib/loader.js validateFetchUrl + render fetch binding)
+// ---------------------------------------------------------------------------
+
+test('chart data.fetch rejects malformed and unsupported URLs', () => {
+  const chart = (fetch) => ({
+    title: 't',
+    sections: [{ content: [{ type: 'chart', kind: 'line', data: { fetch } }] }],
+  });
+  // Looks like a URL but the URL constructor rejects it.
+  assert.throws(
+    () => renderHtml(chart('http://')),
+    (err) =>
+      err.name === 'FetchSpecError' &&
+      /Invalid fetch URL/.test(err.message) &&
+      err.path === 'data.fetch'
+  );
+  // A scheme other than http(s) / self is not fetchable in-browser.
+  assert.throws(
+    () => renderHtml(chart('ftp://cdn.example.com/data.json')),
+    (err) =>
+      err.name === 'FetchSpecError' &&
+      /Fetch URL scheme "ftp" not supported/.test(err.message) &&
+      err.path === 'data.fetch'
+  );
+  // fetch() requires a real hostname; localhost would resolve in dev only.
+  assert.throws(
+    () => renderHtml(chart('http://localhost/data.json')),
+    (err) =>
+      err.name === 'FetchSpecError' &&
+      /Fetch URL must include a valid hostname/.test(err.message) &&
+      err.path === 'data.fetch'
+  );
+});
+
+test('non-string data.fetch raises StyleError at the chart data path', () => {
+  assert.throws(
+    () =>
+      renderHtml({
+        title: 't',
+        sections: [{ content: [{ type: 'chart', kind: 'line', data: { fetch: 42 } }] }],
+      }),
+    (err) =>
+      err.name === 'StyleError' &&
+      /data\.fetch must be a string URL/.test(err.message) &&
+      err.path === 'page.sections[0].content.data.fetch'
+  );
+});
+
+test('non-mapping top-level DSL and non-string layout raise StyleError', () => {
+  assert.throws(
+    () => renderHtml([{ title: 'x' }]),
+    (err) =>
+      err.name === 'StyleError' &&
+      /Top-level DSL must be a mapping/.test(err.message) &&
+      err.path === '.'
+  );
+  assert.throws(
+    () => renderHtml({ title: 'x', layout: 7, sections: [] }),
+    (err) =>
+      err.name === 'StyleError' &&
+      /"layout" must be a string/.test(err.message) &&
+      err.path === 'page.layout'
+  );
+});
+
 test('table object rows render union-of-keys header and cells', () => {
   // rowsToTableData falls back to object rows: the header is the union of the
   // objects keys in first-seen order, and each row aligns to that order.
