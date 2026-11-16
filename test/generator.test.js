@@ -202,6 +202,38 @@ test('watch mode honors DG_OUTPUT filename override', () => {
   }
 });
 
+test('watch mode reports a failed initial build cleanly instead of crashing', () => {
+  // The initial build runs synchronously inside watch(); a DSL that fails the
+  // build (here an unknown component type) must surface through the same
+  // DashboardError diagnostic as build — never a raw stack trace — and must
+  // leave the watcher running for a later retry.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-fail-'));
+  const src = path.join(tmp, 'site.yaml');
+  fs.writeFileSync(src, 'title: bad\nsections:\n  - content:\n      - type: nope\n');
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origExit = process.exitCode;
+  let stderr = '';
+  const origWrite = process.stderr.write;
+  process.stderr.write = (s) => { stderr += String(s); return true; };
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'));
+    assert.match(stderr, /Unknown component type "nope"/, 'reports the build error');
+    assert.ok(!/\s+at /.test(stderr), 'no raw stack trace leaks out');
+    assert.strictEqual(process.exitCode, 1, 'failed initial build sets a failing exit code');
+  } finally {
+    process.stderr.write = origWrite;
+    if (watcher) watcher.close();
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('dg build honors the DG_OUTPUT filename override', () => {
   const os = require('node:os');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-out-'));
