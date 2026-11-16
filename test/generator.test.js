@@ -2215,6 +2215,15 @@ test('chart data.fetch rejects malformed and unsupported URLs', () => {
       /Fetch URL must include a valid hostname/.test(err.message) &&
       err.path === 'data.fetch'
   );
+  // self: must name a fixture path; an empty path normalizes to "" and would
+  // bind the fixture source directory itself (copying the whole tree at build).
+  assert.throws(
+    () => renderHtml(chart('self://')),
+    (err) =>
+      err.name === 'FetchSpecError' &&
+      /"self:" must name a fixture path/.test(err.message) &&
+      err.path === 'data.fetch'
+  );
 });
 
 test('non-string data.fetch raises StyleError at the chart data path', () => {
