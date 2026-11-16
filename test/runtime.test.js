@@ -460,3 +460,60 @@ test('runtime renders multi-series bar chart into SVG bars', () => {
   assert.ok(Math.max(...heights) > Math.min(...heights), 'bar heights differ by value');
   assert.ok(out.includes('>a</span>') && out.includes('>b</span>'), 'legend lists both series');
 });
+
+test('runtime draws one pie slice per series key in a single data row', () => {
+  // README: pie accepts "a single row with a multi-key series: map (one slice
+  // per series key)". The runtime must explode that one row into slices, not
+  // drop every key but the first.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: pie\n        title: Share\n        data:\n          - label: Q1\n            series: { Organic: 60, Paid: 40 }\n',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'Share' },
+  ]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'Q1', series: { Organic: 60, Paid: 40 } }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('<svg'), 'pie produced svg');
+  assert.strictEqual((out.match(/class="dg-slice"/g) || []).length, 2, 'one slice per series key');
+  assert.ok(out.includes('Organic 60.0%') && out.includes('Paid 40.0%'), 'slice labels use the series keys with computed shares');
+});
+
+test('runtime applies custom swatches to line and bar series paths', () => {
+  // data-chart-swatches must color each line/bar series stroke/fill (and the
+  // legend swatch) just as it does pie slices, instead of the palette hash
+  // fallback.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Trend\n        swatches: { a: "#16a34a", b: "#2563eb" }\n        data:\n          - { label: Jan, series: { a: 10, b: 4 } }\n          - { label: Feb, series: { a: 14, b: 6 } }\n      - type: chart\n        kind: bar\n        title: Sales\n        swatches: { a: "#f59e0b", b: "#8b5cf6" }\n        data:\n          - { label: Q1, series: { a: 10, b: 5 } }\n      - type: chart\n        kind: pie\n        title: Share\n        swatches: { Organic: "#16a34a", Paid: "#2563eb" }\n        data:\n          - { label: Organic, value: 60 }\n          - { label: Paid, value: 40 }\n',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Trend', 'data-chart-swatches': '{"a":"#16a34a","b":"#2563eb"}' },
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-1', 'data-chart-title': 'Sales', 'data-chart-swatches': '{"a":"#f59e0b","b":"#8b5cf6"}' },
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-2', 'data-chart-title': 'Share', 'data-chart-swatches': '{"Organic":"#16a34a","Paid":"#2563eb"}' },
+  ]);
+  const data = {
+    'chart-0': [
+      { label: 'Jan', series: { a: 10, b: 4 } },
+      { label: 'Feb', series: { a: 14, b: 6 } },
+    ],
+    'chart-1': [{ label: 'Q1', series: { a: 10, b: 5 } }],
+    'chart-2': [{ label: 'Organic', value: 60 }, { label: 'Paid', value: 40 }],
+  };
+  runRuntime(code, dom, data);
+  const lineOut = figureEls[0].innerHTML;
+  const barOut = figureEls[1].innerHTML;
+  const pieOut = figureEls[2].innerHTML;
+  assert.ok(lineOut.includes('stroke="#16a34a"') && lineOut.includes('stroke="#2563eb"'), 'each line series gets its swatch stroke');
+  assert.ok(lineOut.includes('background:#16a34a') && lineOut.includes('background:#2563eb'), 'line legend swatches use the custom colors');
+  assert.ok(barOut.includes('fill="#f59e0b"') && barOut.includes('fill="#8b5cf6"'), 'each bar series gets its swatch fill');
+  assert.ok(barOut.includes('background:#f59e0b'), 'bar legend swatch uses the custom color');
+  assert.ok(pieOut.includes('fill="#16a34a"'), 'pie slices still honor swatches alongside line/bar');
+  // The palette hash fallback must not leak in where swatches are set: line
+  // strokes, bar fills and pie fills are all covered by their own swatch maps.
+  assert.ok(!lineOut.includes('stroke="#3b82f6"'), 'line uses no palette fallback stroke');
+  assert.ok(!barOut.includes('fill="#3b82f6"'), 'bar uses no palette fallback fill');
+  assert.ok(!pieOut.includes('fill="#3b82f6"') && !pieOut.includes('fill="#f59e0b"'), 'pie uses no palette fallback fill');
+});
