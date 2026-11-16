@@ -809,6 +809,73 @@ test('runtime narrows bars below the 36px cap when many categories crowd the plo
   assert.ok(out.includes('>A</text>') && out.includes('>P</text>'), 'x-axis labels span first and last category');
 });
 
+test('runtime bridges missing series values in line charts without NaN', () => {
+  // Sparse series data: a row can omit a series key (series: {} leaves the
+  // value undefined, which Number() coerces to NaN). When drawing, the runtime
+  // must skip the missing point entirely — the line path bridges Jan to Mar —
+  // rather than emitting a NaN coordinate or treating the gap as a zero value.
+  // The x-axis must still label the empty row and the legend must still name
+  // the sparse series.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Sparse\n        data:\n          - { label: Jan, series: { a: 10 } }\n          - { label: Feb, series: {} }\n          - { label: Mar, series: { a: 12 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Sparse' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Jan', series: { a: 10 } },
+      { label: 'Feb', series: {} },
+      { label: 'Mar', series: { a: 12 } },
+    ],
+  });
+  const out = figureEls[0].innerHTML;
+  const d = /<path class="dg-series" d="([^"]+)"/.exec(out);
+  assert.ok(d, 'line chart produced a series path');
+  // Three x-slots: Jan at the plot left edge (56), Mar at the right edge (740).
+  // The path must span only the present points.
+  assert.ok(/M56\.0 \d+\.\d+ L740\.0 \d+\.\d+/.test(d[1]),
+    'path bridges the missing point (Jan x=56 straight to Mar x=740)');
+  assert.ok(!/<path class="dg-series" d="[^"]*NaN/.test(out), 'no NaN in the line path');
+  assert.ok(out.includes('>Feb</text>'), 'the missing row still gets its x-axis label');
+  assert.ok(out.includes('>a</span>'), 'legend still names the sparse series');
+  assert.ok(!out.includes('NaN'), 'no NaN leaks into the chart');
+});
+
+test('runtime leaves bar cells empty for rows missing a series value', () => {
+  // In a multi-series bar chart one category may not have every series (Q2 has
+  // no b). The missing cell must simply not render — no NaN-height rect, no
+  // zero-height placeholder — while the category keeps its x label and the
+  // series keeps its legend entry.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: bar\n        title: Sparse\n        data:\n          - { label: Q1, series: { a: 10, b: 5 } }\n          - { label: Q2, series: { a: 20 } }\n          - { label: Q3, series: { a: 8, b: 9 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'Sparse' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: 10, b: 5 } },
+      { label: 'Q2', series: { a: 20 } },
+      { label: 'Q3', series: { a: 8, b: 9 } },
+    ],
+  });
+  const out = figureEls[0].innerHTML;
+  const bars = out.match(/<rect class="dg-bar" [^>]*?height="([\d.]+)"/g) || [];
+  assert.strictEqual(bars.length, 5, 'one bar per present value, missing Q2/b cell draws nothing');
+  for (const b of bars) {
+    const h = Number(b.match(/height="([\d.]+)"/)[1]);
+    assert.ok(Number.isFinite(h) && h > 0, `bar height is finite and positive (got ${h})`);
+  }
+  assert.ok(out.includes('>Q2</text>'), 'Q2 still labelled though one series is missing there');
+  assert.ok(out.includes('>a</span>') && out.includes('>b</span>'), 'legend lists every series');
+  assert.ok(!out.includes('NaN'), 'no NaN leaks into the bar chart');
+});
+
 test('runtime coerces non-numeric pie values to zero and skips empty-label rows', () => {
   // Slice sources have two guardrails: a row with an empty/null label must not
   // become a slice (render.js keeps the legend readable), and a non-numeric
