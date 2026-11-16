@@ -1126,15 +1126,17 @@ test('page-level nav renders a labelled nav from { label, href } items', () => {
 
 test('explicit nav item label and href fall backs', () => {
   // A page-level `nav:` item may omit the label (the href text is used instead)
-  // or the href (falls back to "#"); both still render a dg-navlink.
+  // or the href (falls back to "#"); an item with neither still renders a link
+  // with an empty text and a bare "#" instead of crashing.
   const doc = {
     title: 'nav-fb',
-    nav: [{ href: '#docs' }, { label: 'Home' }],
+    nav: [{ href: '#docs' }, { label: 'Home' }, {}],
     sections: [],
   };
   const html = renderHtml(doc);
   assert.match(html, /<li><a class="dg-navlink" href="#docs">#docs<\/a><\/li>/);
   assert.match(html, /<li><a class="dg-navlink" href="#">Home<\/a><\/li>/);
+  assert.match(html, /<li><a class="dg-navlink" href="#"><\/a><\/li>/);
 });
 
 test('page-level nav auto-links section titles when no nav key is given', () => {
