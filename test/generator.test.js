@@ -645,6 +645,34 @@ test('relative fetch URL is allowed for local fixtures', () => {
   assert.ok(html.includes('market.json'));
 });
 
+test('self:// fetch specs embed as relative paths for the runtime', () => {
+  // README: "self://<path> is treated as a local relative path". fetch()
+  // rejects the self scheme at page-open, so the embedded runtime manifest
+  // must carry the plain relative fixture path only.
+  const doc = {
+    title: 'x',
+    sections: [{ content: [{ type: 'chart', kind: 'line', data: { fetch: 'self://data/market.json' } }] }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /data-chart-source="self:\/\/data\/market\.json"/, 'attribute keeps the authored spec');
+  assert.ok(!html.includes('fetch("self:'), 'runtime never calls fetch on a self: URL');
+  assert.match(
+    html,
+    /\{"key":"chart-0","url":"data\/market\.json"\}/,
+    'runtime manifest embeds the normalized relative path'
+  );
+});
+
+test('self:// absolute-ish path still normalizes to a relative fixture path', () => {
+  const doc = {
+    title: 'x',
+    sections: [{ content: [{ type: 'chart', kind: 'line', data: { fetch: 'self://fixtures/market.json' } }] }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /"url":"fixtures\/market\.json"/);
+  assert.ok(!html.includes('fetch("self:'));
+});
+
 test('bad YAML raises ParseError with position', () => {
   assert.throws(
     () => buildFromSource('title: [unclosed\n  sections:\n  - {', 'bad.yaml'),
@@ -811,6 +839,43 @@ test('build copies nested local fetch fixtures next to the output', () => {
       fs.existsSync(path.join(tmp, 'dist', 'data', 'market.json')),
       'nested fixture mirrored into dist/data'
     );
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
+test('build resolves self:// fixtures as local relative paths', () => {
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-self-'));
+  fs.mkdirSync(path.join(tmp, 'data'), { recursive: true });
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), [
+    'title: t',
+    'sections:',
+    '  - content:',
+    '      - type: chart',
+    '        kind: line',
+    '        data: { fetch: "self://data/market.json" }',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(tmp, 'data', 'market.json'), '[]');
+
+  const { cmdBuild } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    cmdBuild({ _: ['dg.dsl.yaml'] });
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'data', 'market.json')),
+      'self:// fixture mirrored into dist/data'
+    );
+    const html = fs.readFileSync(path.join(tmp, 'dist', 'site.html'), 'utf8');
+    assert.match(
+      html,
+      /"url":"data\/market\.json"/,
+      'built page fetches the mirrored relative path, not a self: URL'
+    );
+    assert.ok(!html.includes('fetch("self:'), 'runtime manifest carries no self: URLs');
   } finally {
     process.chdir(origCwd);
   }
