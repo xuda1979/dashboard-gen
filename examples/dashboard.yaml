@@ -27,6 +27,29 @@ sections:
 
   - title: Metrics
     content:
+      - type: grid
+        columns: 3
+        items:
+          - type: stat
+            label: Requests / min
+            value: 1180
+            delta: { value: 12.4, tone: good }
+            caption: Rolling 1h average
+          - type: stat
+            label: P99 latency
+            value: 212
+            suffix: ms
+            delta: { value: -8, tone: good }
+            caption: Down from 220 ms
+          - type: stat
+            label: Error rate
+            value: 0.04
+            suffix: "%"
+            delta: { value: 0.01, tone: bad }
+            progress: 38
+            progressTone: danger
+            caption: SLO budget 0.1%
+
       - type: chart
         kind: line
         title: Requests / minute

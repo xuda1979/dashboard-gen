@@ -81,6 +81,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `button`     | `text`, `href`, `style` (primary/secondary/subtle/danger), `newtab` |
 | `link`       | `text`/`label`, `href`, `style` (`button`), `newtab`    |
 | `card`       | `title`, `text`, `intent` (primary/success/danger/warning) |
+| `stat`       | `value`, `label`, `prefix`/`suffix`, `delta`, `progress` (KPI metric) |
 | `badge`      | `text`, `tone` (neutral/primary/success/warning/danger) |
 | `divider`    | —                                                       |
 | `quote`      | `text`, `cite`                                          |

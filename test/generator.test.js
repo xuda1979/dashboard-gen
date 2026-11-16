@@ -298,6 +298,48 @@ test('unknown component type raises readable error', () => {
   );
 });
 
+test('stat component renders KPI value, label, prefix/suffix, delta and progress', () => {
+  const doc = {
+    title: 'stats',
+    sections: [{
+      content: [{
+        type: 'stat',
+        label: 'Requests/min',
+        value: '1180',
+        prefix: '~',
+        suffix: '/m',
+        delta: { value: 12.4, tone: 'good' },
+        progress: 73,
+        progressTone: 'success',
+        caption: 'Rolling 1h average',
+      }],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /class="dg-stat"/);
+  assert.match(html, /class="dg-stat-value"[^>]*>~1180\/m</);
+  assert.match(html, /class="dg-stat-label"[^>]*>Requests\/min</);
+  assert.match(html, /class="dg-stat-delta dg-stat-delta--good"[^>]*>▲ 12.4</);
+  assert.match(html, /class="dg-stat-progress"/);
+  assert.match(html, /class="dg-stat-progress-fill dg-stat-progress-fill--success" style="width:73%"/);
+  assert.match(html, /class="dg-stat-caption"[^>]*>Rolling 1h average</);
+  assert.match(html, /role="img"/); // a11y: figure has a label
+});
+
+test('stat delta renders neutral for numeric without tone and honors bad tone', () => {
+  const html = renderHtml({
+    title: 'stats',
+    sections: [{
+      content: [
+        { type: 'stat', label: 'A', value: '1', delta: -8 },
+        { type: 'stat', label: 'B', value: '2', delta: { value: -0.5, tone: 'bad' } },
+      ],
+    }],
+  });
+  assert.match(html, /class="dg-stat-delta"[^>]*>▼ -8</); // neutral
+  assert.match(html, /class="dg-stat-delta dg-stat-delta--bad"[^>]*>▼ -0.5</);
+});
+
 test('invalid chart data shape raises StyleError', () => {
   const doc = {
     title: 'x',
@@ -392,10 +434,15 @@ test('serve resolves nested paths inside the served dir and blocks traversal', a
   fs.writeFileSync(path.join(root, 'sub', 'a.html'), '<h1>nested</h1>');
   fs.writeFileSync(path.join(root, 'secret.txt'), 'top secret');
 
-  const port = 43100 + (Math.floor(Math.random() * 200) % 200);
+  // Listen on an ephemeral port (0) so parallel runs / leftover servers can
+  // never collide with a shared fixed port (was an intermittent EADDRINUSE flake).
   const origLog = console.log;
   console.log = () => {};
-  const server = cmdServe({ _: [root], port });
+  const server = cmdServe({ _: [root], port: 0 });
+  while (!server.address()) {
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  const port = server.address().port;
   const base = `http://localhost:${port}`;
   const get = (p) => new Promise((resolvePromise) => {
     // http.get(URL) normalizes ".." away before sending; use a raw request
