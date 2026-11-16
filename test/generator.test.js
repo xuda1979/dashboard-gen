@@ -1650,6 +1650,57 @@ test('serve answers 404 for missing files and sets content types by extension', 
   }
 });
 
+test('serve rejects an invalid port with a clean error, not a raw listen() stack', () => {
+  // A non-numeric or out-of-range port (--port abc, --port 70000, PORT=abc)
+  // previously crashed with a raw ERR_SOCKET_BAD_PORT stack from server.listen.
+  // It must fail with a clean diagnostic and no server started — the same error
+  // style the other guard paths use.
+  const { cmdServe } = require('../lib/cli');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-port-bad-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<h1>port</h1>');
+  const origPort = process.env.PORT;
+
+  const origExit = process.exitCode;
+  const origWrite = process.stderr.write;
+  let stderr = '';
+  process.stderr.write = (s) => { stderr += String(s); return true; };
+  try {
+    // --port abc is NaN -> rejected
+    const a = cmdServe({ _: [root], port: 'abc' });
+    assert.strictEqual(a, null, 'no server started for a NaN port');
+    assert.match(stderr, /\[dashboard-gen\] Invalid port "abc"/, 'clean diagnostic reports the bad value');
+    assert.ok(!/ERR_SOCKET_BAD_PORT|\s+at /.test(stderr), 'no raw listen() stack leaks out');
+    assert.strictEqual(process.exitCode, 1, 'failing exit code set');
+
+    stderr = '';
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    // out-of-range port -> rejected
+    const b = cmdServe({ _: [root], port: '70000' });
+    assert.strictEqual(b, null, 'no server started for an out-of-range port');
+    assert.match(stderr, /\[dashboard-gen\] Invalid port "70000"/);
+
+    stderr = '';
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    // PORT env with a bad value -> rejected the same way
+    process.env.PORT = 'not-a-port';
+    const c = cmdServe({ _: [root] });
+    assert.strictEqual(c, null, 'no server started for a bad PORT env');
+    assert.match(stderr, /\[dashboard-gen\] Invalid port "not-a-port"/);
+
+    // a valid port still serves after the rejections
+    delete process.env.PORT;
+    const ok = cmdServe({ _: [root], port: 0 });
+    assert.ok(ok && ok.close, 'valid port starts a server');
+    ok.close();
+  } finally {
+    process.stderr.write = origWrite;
+    if (origPort === undefined) delete process.env.PORT;
+    else process.env.PORT = origPort;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+  }
+});
+
 test('serve picks the port from PORT env, the --port flag, or 4173', () => {
   const { cmdServe } = require('../lib/cli');
   const http = require('node:http');
