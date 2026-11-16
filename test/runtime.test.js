@@ -208,6 +208,29 @@ test('runtime scales line chart by data range, not numeric x-labels', () => {
   assert.ok(Math.min(...ys) >= 22, 'polyline stays inside the plot area');
 });
 
+test('runtime renders array-of-arrays with a header row into a labelled series', () => {
+  // README: inline `data:` accepts an array of arrays "optionally with a header
+  // row". The embedded store keeps the raw rows (header included); the runtime
+  // must strip the header, derive the series name from it, and draw one point
+  // per data row.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Growth\n        data:\n          - [Month, revenue]\n          - [Jan, 10]\n          - [Feb, 14]\n          - [Mar, 18]',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Growth' }]);
+  const embedded = extractData(html)['chart-0'];
+  assert.deepStrictEqual(embedded, [['Month', 'revenue'], ['Jan', 10], ['Feb', 14], ['Mar', 18]], 'store keeps the header row');
+  runRuntime(code, dom, { 'chart-0': embedded });
+  const out = figureEls[0].innerHTML;
+  const d = /<path class="dg-series" d="([^"]+)"/.exec(out);
+  assert.ok(d, 'line chart produced a series path');
+  const ys = d[1].match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+  assert.strictEqual(ys.length, 3, 'one point per data row, header row dropped');
+  assert.ok(out.includes('revenue'), 'legend uses the header-derived series name');
+  assert.ok(!out.includes('Month'), 'header label is not drawn as a data point');
+});
+
 test('runtime extracts fetch specs and attempts fetch for missing data', async () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'fetch.yaml'), 'utf8');
   const html = buildFromSource(src, 'fetch.yaml', { fileDir: 'examples' });
