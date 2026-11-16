@@ -877,6 +877,34 @@ test('button icon adds an inline SVG and stat progressLabel overrides the aria l
   assert.match(html, /class="dg-stat-progress" aria-label="8%" role="img"/, 'progress defaults to N% when no label');
 });
 
+test('grid card shorthand and quote cite object render their cell forms', () => {
+  // README: a grid `items` entry may be `{ card: {...} }` (full card inside a
+  // cell) and a quote `cite` may be `{ text }`. Both were unpinned.
+  const html = renderHtml({
+    title: 'shorthands',
+    sections: [{
+      content: [
+        {
+          type: 'grid',
+          columns: 2,
+          items: [
+            { card: { title: 'C1', text: 'one', intent: 'success' } },
+            'plain text item',
+          ],
+        },
+        { type: 'quote', text: 'Measure twice.', cite: { text: 'Ops Handbook' } },
+      ],
+    }],
+  });
+  assert.match(
+    html,
+    /<div class="dg-cell"><div class="dg-card dg-card--success"><h3 class="dg-card-title">C1<\/h3>one<\/div>/,
+    'card shorthand renders a full card inside the cell'
+  );
+  assert.match(html, /<div class="dg-cell">plain text item<\/div>/, 'string items render escaped text');
+  assert.match(html, /<footer class="dg-quote-cite">— Ops Handbook<\/footer>/, 'cite object form renders its text');
+});
+
 test('invalid chart data shape raises StyleError', () => {
   const doc = {
     title: 'x',
