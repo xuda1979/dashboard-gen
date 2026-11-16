@@ -1193,6 +1193,36 @@ test('dg new applies the chart template distinctly from landing', () => {
   }
 });
 
+test('dg new table/dashboard/fetch templates ship distinct content', () => {
+  // Every template must scaffold content true to its purpose, not the landing
+  // hero. table -> table rows, dashboard -> sidebar nav, fetch -> runtime
+  // fetch fixture (also copied into the project).
+  const os = require('node:os');
+  const { cmdNew } = require('../lib/cli');
+  const cases = [
+    { template: 'table', proj: 'tblproj', marker: /caption: Current deployment status per service/ },
+    { template: 'dashboard', proj: 'dashproj', marker: /layout: sidebar/ },
+    { template: 'fetch', proj: 'fproj', marker: /fetch: market\.json/ },
+  ];
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-templates-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    for (const { template, proj, marker } of cases) {
+      cmdNew({ _: [proj], template });
+      const dslPath = path.join(cwd, proj, 'dg.dsl.yaml');
+      assert.ok(fs.existsSync(dslPath), `${template} project scaffolded`);
+      const dsl = fs.readFileSync(dslPath, 'utf8');
+      assert.match(dsl, marker, `${template} has its template marker`);
+      assert.doesNotMatch(dsl, /Your data, shipped in one YAML file/, `${template} is not the landing hero`);
+    }
+    // fetch template binds a local fixture that must be copied alongside
+    assert.ok(fs.existsSync(path.join(cwd, 'fproj', 'market.json')), 'fetch fixture copied into the project');
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 test('build copies nested local fetch fixtures next to the output', () => {
   const os = require('node:os');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-copy-'));
