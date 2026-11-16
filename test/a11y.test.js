@@ -83,3 +83,52 @@ test('a11y-check fails when the page theme has insufficient contrast', () => {
   assert.strictEqual(res.code, 1, 'exit code 1');
   assert.match(res.stderr, /contrast \(light\): 1\.\d+:1 below AA 4\.5:1/, 'reports the failing ratio');
 });
+
+test('a11y-check checks the dark theme palette against AA too', () => {
+  // theme.dark overrides merge into the dark CSS block; the lint measures that
+  // palette (bgs/tcs index 1) under the same 4.5:1 threshold while the light
+  // palette in :root still passes. Only the light path was pinned before.
+  const src =
+    'title: t\n' +
+    'theme:\n' +
+    '  pageBg: "#ffffff"\n' +
+    '  textColor: "#111111"\n' +
+    '  dark:\n' +
+    '    pageBg: "#111111"\n' +
+    '    textColor: "#0f0f0f"\n' +
+    'sections:\n' +
+    '  - title: S\n' +
+    '    content:\n' +
+    '      - type: paragraph\n' +
+    '        text: hi\n';
+  const html = buildFromSource(src, 'dark-low-contrast.yaml');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-dark-'));
+  const file = path.join(tmp, 'page.html');
+  fs.writeFileSync(file, html);
+  const res = runCheck(file);
+  assert.strictEqual(res.ok, false, 'expected failure for low dark contrast');
+  assert.strictEqual(res.code, 1, 'exit code 1');
+  assert.match(res.stderr, /contrast \(dark\): 1\.0\d:1 below AA 4\.5:1/, 'reports the failing dark ratio');
+  assert.match(res.stdout, /contrast \(light\): \d+\.\d+:1 .* passes AA \(4\.5:1\)/, 'light palette still passes');
+
+  // sanity: with a compliant dark palette the same page passes.
+  const good =
+    'title: t\n' +
+    'theme:\n' +
+    '  pageBg: "#ffffff"\n' +
+    '  textColor: "#111111"\n' +
+    '  dark:\n' +
+    '    pageBg: "#111111"\n' +
+    '    textColor: "#dddddd"\n' +
+    'sections:\n' +
+    '  - title: S\n' +
+    '    content:\n' +
+    '      - type: paragraph\n' +
+    '        text: hi\n';
+  const htmlGood = buildFromSource(good, 'dark-good.yaml');
+  const fileGood = path.join(tmp, 'good.html');
+  fs.writeFileSync(fileGood, htmlGood);
+  const resGood = runCheck(fileGood);
+  assert.strictEqual(resGood.ok, true, 'compliant dark palette passes');
+  assert.match(resGood.stdout, /contrast \(dark\): \d+\.\d+:1/, 'dark ratio reported');
+});
