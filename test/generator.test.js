@@ -1347,6 +1347,65 @@ test('serve resolves nested paths inside the served dir and blocks traversal', a
   }
 });
 
+test('serve blocks percent-encoded traversal and sibling-prefix escapes', async () => {
+  // Beyond the literal ".." raw-path guard, percent-encoding must not smuggle
+  // a traversal through: "%2e%2e" (both dots encoded) trips the raw-path check,
+  // while a mixed form that survives it (literal dots, slash encoded as "%2f")
+  // must still be caught by the path.resolve prefix guard after decoding. And
+  // that prefix guard must be exact (dir + path.sep): a sibling directory that
+  // merely shares the root's name prefix must stay unreachable, not leak.
+  const { cmdServe } = require('../lib/cli');
+  const http = require('node:http');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-serve-enc-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<h1>root</h1>');
+  const sibling = root + 'x'; // shares the root's name prefix
+  fs.mkdirSync(sibling, { recursive: true });
+  fs.writeFileSync(path.join(sibling, 'leak.txt'), 'sibling secret');
+
+  const origLog = console.log;
+  console.log = () => {};
+  const server = cmdServe({ _: [root], port: 0 });
+  while (!server.address()) {
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  const port = server.address().port;
+  const get = (p) => new Promise((resolvePromise) => {
+    const req = http.request({ host: 'localhost', port, path: p, method: 'GET' }, (res) => {
+      let body = '';
+      res.on('data', (d) => (body += d));
+      res.on('end', () => resolvePromise({ status: res.statusCode, body }));
+    });
+    req.on('error', rejectOnce);
+    req.end();
+    function rejectOnce(e) { console.log = origLog; reject(e); }
+  });
+  await new Promise((r) => setTimeout(r, 150));
+  try {
+    // both dots percent-encoded -> raw-path %2e%2e guard (lowercase and uppercase)
+    assert.strictEqual((await get('/%2e%2e/leak.txt')).status, 403);
+    assert.strictEqual((await get('/%2E%2E/leak.txt')).status, 403);
+    // every component encoded -> raw %2e%2e guard
+    assert.strictEqual((await get('/%2e%2e%2fsecret.txt')).status, 403);
+    // slash encoded with literal dots -> survives the raw check; the decoded
+    // path.resolve prefix guard must still reject the escape
+    assert.strictEqual((await get('/..%2fsecret.txt')).status, 403);
+    // sibling dir sharing the root's name prefix: reachable only if the guard
+    // wrongly used startsWith(dir) instead of startsWith(dir + path.sep)
+    const sib = await get('/..%2f' + path.basename(sibling) + '%2fleak.txt');
+    assert.strictEqual(sib.status, 403, 'sibling-prefix dir is not served');
+    assert.ok(!sib.body.includes('sibling secret'), 'no sibling content leaks');
+    // the served tree itself still works after the guard spam
+    const ok = await get('/');
+    assert.strictEqual(ok.status, 200);
+    assert.strictEqual(ok.body, '<h1>root</h1>');
+  } finally {
+    server.close();
+    console.log = origLog;
+    fs.rmSync(sibling, { recursive: true, force: true });
+  }
+});
+
 test('serve answers 404 for missing files and sets content types by extension', async () => {
   // The static-file path past the traversal/encoding guards: an absent file
   // must be a 404 with text/plain (a build hint), while served files carry a
