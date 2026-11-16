@@ -1527,3 +1527,36 @@ test('divider component emits a horizontal rule', () => {
   assert.match(html, /<hr class="dg-divider">/);
 });
 
+test('table header:false treats numeric first rows as body data', () => {
+  // rowsToTableData auto-detects a header for array-of-arrays only when the
+  // first row is strings; `header: false` must also suppress the header for
+  // numeric rows (which the string heuristic would not touch).
+  const html = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{ type: 'table', header: false, rows: [[2026, 42], [2025, 38]] }],
+    }],
+  });
+  assert.match(html, /<table class="dg-table"><tbody><tr><th scope="row">2026<\/th><td>42<\/td><\/tr><tr><th scope="row">2025<\/th><td>38<\/td><\/tr><\/tbody><\/table>/);
+  assert.ok(!html.includes('<thead>'), 'no header row is emitted');
+});
+
+test('table object rows render union-of-keys header and cells', () => {
+  // rowsToTableData falls back to object rows: the header is the union of the
+  // objects keys in first-seen order, and each row aligns to that order.
+  const html = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{
+        type: 'table',
+        rows: [{ name: 'api', v: 2 }, { name: 'auth', v: 1 }],
+      }],
+    }],
+  });
+  assert.match(
+    html,
+    /<thead><tr><th scope="col">name<\/th><th scope="col">v<\/th><\/tr><\/thead><tbody><tr><td>api<\/td><td>2<\/td><\/tr><tr><td>auth<\/td><td>1<\/td><\/tr><\/tbody>/,
+    'object rows produce a union header and aligned cells'
+  );
+});
+
