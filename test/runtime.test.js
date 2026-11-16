@@ -781,3 +781,30 @@ test('runtime falls back to the palette when data-chart-swatches is invalid JSON
   assert.ok(!out.includes('Chart data parse failed'), 'no parse error banner');
   assert.ok(!out.includes('NaN'), 'no NaN leaks');
 });
+
+test('runtime narrows bars below the 36px cap when many categories crowd the plot', () => {
+  // barW = Math.min(36, (groupW * 0.7) / series.length): with a handful of
+  // categories the 36px cap wins (pinned by the multi-series bar test), but a
+  // wide dataset must take the group-scaled branch — bars shrink so they stay
+  // inside the plot instead of overflowing past the right edge.
+  const rows = [];
+  for (let i = 1; i <= 16; i++) rows.push([String.fromCharCode(64 + i), i]);
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: bar\n        title: Wide\n        data:\n          - [A, 1]\n          - [B, 2]\n          - [C, 3]\n          - [D, 4]\n          - [E, 5]\n          - [F, 6]\n          - [G, 7]\n          - [H, 8]\n          - [I, 9]\n          - [J, 10]\n          - [K, 11]\n          - [L, 12]\n          - [M, 13]\n          - [N, 14]\n          - [O, 15]\n          - [P, 16]',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'Wide' },
+  ]);
+  runRuntime(code, dom, { 'chart-0': rows });
+  const out = figureEls[0].innerHTML;
+  const bars = out.match(/<rect class="dg-bar" x="([\d.]+)" y="[\d.]+" width="([\d.]+)" /g) || [];
+  assert.strictEqual(bars.length, 16, 'one bar per category');
+  const widths = bars.map((b) => Number(b.match(/width="([\d.]+)"/)[1]));
+  assert.ok(widths.every((w) => w < 36), `bars shrink below the 36px cap (got ${Math.max(...widths)})`);
+  const xs = bars.map((b) => Number(b.match(/x="([\d.]+)"/)[1]));
+  assert.ok(Math.min(...xs) >= 56, 'first bar starts inside the plot');
+  assert.ok(Math.max(...xs) + Math.max(...widths) <= 740, 'last bar ends inside the plot (no overflow)');
+  assert.ok(out.includes('>A</text>') && out.includes('>P</text>'), 'x-axis labels span first and last category');
+});
