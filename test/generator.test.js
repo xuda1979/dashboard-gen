@@ -1167,6 +1167,29 @@ test('duplicate section titles get deduped anchor ids shared with the auto nav',
   assert.strictEqual(new Set(ids).size, ids.length, 'section anchor ids are unique');
 });
 
+test('null section entries are skipped in nav and layout instead of crashing', () => {
+  // `sections` validation only checks it is an array, so a null entry can reach
+  // the render pass. collectChartData already skips null sections; renderNav and
+  // asWidgets must do the same (s.title on null used to throw a raw TypeError
+  // that aborted the whole build). The null entry is omitted — no stub nav link,
+  // no hollow section — and following sections still render.
+  const doc = {
+    title: 'nullsec',
+    sections: [
+      null,
+      { title: 'Reach', content: [{ type: 'paragraph', text: 'hi' }] },
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.strictEqual((html.match(/<section class="dg-section">/g) || []).length, 1,
+    'only the real section renders');
+  assert.strictEqual((html.match(/class="dg-navlink"/g) || []).length, 1,
+    'the null entry gets no nav link');
+  assert.match(html, /<li><a class="dg-navlink" href="#s-reach">Reach<\/a><\/li>/);
+  assert.match(html, /<h2 class="dg-section-title" id="s-reach">Reach<\/h2>/);
+  assert.match(html, /<p class="dg-paragraph">hi<\/p>/);
+});
+
 test('unknown component type raises readable error', () => {
   const doc = { title: 'x', sections: [{ content: [{ type: 'nope' }] }] };
   assert.throws(
