@@ -492,6 +492,42 @@ test('chart and table captions surface as aria-labels and notes', () => {
   assert.match(html, /<p class="dg-note">Rolling 1h<\/p>/);
 });
 
+test('page-level nav renders a labelled nav from { label, href } items', () => {
+  // README a11y: generated pages include "a labelled <nav>". The page-level
+  // `nav:` key takes a { label, href } list and renders as a dg-nav landmark
+  // with an aria-label, ahead of the main landmark.
+  const doc = {
+    title: 'nav-page',
+    description: 'desc',
+    nav: [{ label: 'Metrics', href: '#s-metrics' }, { label: 'Docs', href: '#docs' }],
+    sections: [{ title: 'Metrics', content: [{ type: 'paragraph', text: 'hi' }] }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<nav class="dg-nav" aria-label="Primary"><ul>/);
+  assert.match(html, /<li><a class="dg-navlink" href="#s-metrics">Metrics<\/a><\/li>/);
+  assert.match(html, /<li><a class="dg-navlink" href="#docs">Docs<\/a><\/li>/);
+  assert.ok(html.indexOf('dg-navlink') < html.indexOf('<main'), 'nav precedes the main landmark');
+});
+
+test('page-level nav auto-links section titles when no nav key is given', () => {
+  // Without `nav:`, the labelled <nav> is still emitted, one link per section,
+  // pointing at the slugified section anchor each section renders.
+  const doc = {
+    title: 'auto-nav',
+    description: 'd',
+    sections: [
+      { title: 'Metrics', content: [{ type: 'paragraph', text: 'hi' }] },
+      { title: 'Docs & More', content: [{ type: 'paragraph', text: 'bye' }] },
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<nav class="dg-nav" aria-label="Primary">/);
+  assert.match(html, /href="#s-metrics">Metrics<\/a>/);
+  assert.match(html, /href="#s-docs-more">Docs &amp; More<\/a>/);
+  assert.match(html, /id="s-metrics"/);
+  assert.match(html, /id="s-docs-more"/);
+});
+
 test('unknown component type raises readable error', () => {
   const doc = { title: 'x', sections: [{ content: [{ type: 'nope' }] }] };
   assert.throws(
