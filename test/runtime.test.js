@@ -231,6 +231,31 @@ test('runtime renders array-of-arrays with a header row into a labelled series',
   assert.ok(!out.includes('Month'), 'header label is not drawn as a data point');
 });
 
+test('runtime draws headerless multi-column array rows as auto-named series', () => {
+  // README: inline `data:` accepts "an array of arrays optionally with a header
+  // row". When the header row is absent, the first column is the label and each
+  // remaining column becomes its own series. The runtime must derive the series
+  // names (series1..N) and draw one line per column.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Trend\n        data:\n          - [Jan, 10, 5]\n          - [Feb, 14, 7]\n          - [Mar, 18, 9]',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Trend' }]);
+  const embedded = extractData(html)['chart-0'];
+  assert.deepStrictEqual(embedded, [['Jan', 10, 5], ['Feb', 14, 7], ['Mar', 18, 9]], 'store keeps the raw rows');
+  runRuntime(code, dom, { 'chart-0': embedded });
+  const out = figureEls[0].innerHTML;
+  const paths = out.match(/<path class="dg-series" d="[^"]+"/g);
+  assert.ok(paths, 'line chart produced series paths');
+  assert.strictEqual(paths.length, 2, 'one line per data column');
+  for (const p of paths) {
+    const ys = p.match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+    assert.strictEqual(ys.length, 3, 'one point per row on each series');
+  }
+  assert.ok(out.includes('series1') && out.includes('series2'), 'legend uses auto-derived series names');
+});
+
 test('runtime extracts fetch specs and attempts fetch for missing data', async () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'fetch.yaml'), 'utf8');
   const html = buildFromSource(src, 'fetch.yaml', { fileDir: 'examples' });
