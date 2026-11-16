@@ -1085,6 +1085,43 @@ test('dg new --template=<t> is accepted', () => {
   }
 });
 
+test('dg new accepts the space-separated --template flag through cli dispatch', () => {
+  // README/help show `dg new --template=<t>`; the arg parser must also handle
+  // `--template <t>` (space form) so `dg new site --template chart` works as
+  // typed. This exercises parseArgs + cmdNew, not just cmdNew with a preset map.
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new3-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    cli(['new', 'chartsite', '--template', 'chart']);
+    const dsl = fs.readFileSync(path.join(cwd, 'chartsite', 'dg.dsl.yaml'), 'utf8');
+    assert.match(dsl, /type: chart/, 'chart template scaffolded via --template <t>');
+    assert.match(dsl, /kind: line/, 'chart DSL content present');
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
+test('dg new applies the chart template distinctly from landing', () => {
+  // Sanity: the chart template ships chart components rather than the landing
+  // hero, so the --template flag selects real, distinct content per template.
+  const os = require('node:os');
+  const { cmdNew } = require('../lib/cli');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new4-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    cmdNew({ _: ['chartonly'], template: 'chart' });
+    const dsl = fs.readFileSync(path.join(cwd, 'chartonly', 'dg.dsl.yaml'), 'utf8');
+    assert.match(dsl, /kind: line/);
+    assert.doesNotMatch(dsl, /Your data, shipped in one YAML file/, 'not the landing hero');
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 test('build copies nested local fetch fixtures next to the output', () => {
   const os = require('node:os');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-copy-'));
