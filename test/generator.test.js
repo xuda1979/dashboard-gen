@@ -842,6 +842,62 @@ test('bad YAML raises ParseError with position', () => {
   );
 });
 
+test('bad JSON raises ParseError', () => {
+  assert.throws(
+    () => buildFromSource('{ "title": ', 'bad.json'),
+    (err) => err.name === 'ParseError' && /JSON parse error/.test(err.message)
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Page-level validation (lib/loader.js validatePage)
+// ---------------------------------------------------------------------------
+
+test('unsupported layout raises StyleError listing supported layouts', () => {
+  const doc = { title: 'x', layout: 'wacky', sections: [] };
+  assert.throws(
+    () => renderHtml(doc),
+    (err) =>
+      err.name === 'StyleError' &&
+      /Unsupported layout "wacky"/.test(err.message) &&
+      /hero, grid, sidebar, section, landing/.test(err.message) &&
+      err.path === 'page.layout'
+  );
+});
+
+test('non-string title and description raise StyleError', () => {
+  assert.throws(
+    () => renderHtml({ title: 42, sections: [] }),
+    (err) => err.name === 'StyleError' && /"title" must be a string/.test(err.message) && err.path === 'page.title'
+  );
+  assert.throws(
+    () => renderHtml({ title: 'x', description: [1], sections: [] }),
+    (err) => err.name === 'StyleError' && /"description" must be a string/.test(err.message) && err.path === 'page.description'
+  );
+});
+
+test('non-mapping theme raises StyleError', () => {
+  assert.throws(
+    () => renderHtml({ title: 'x', theme: '#fff', sections: [] }),
+    (err) => err.name === 'StyleError' && /"theme" must be a mapping of CSS tokens/.test(err.message) && err.path === 'page.theme'
+  );
+});
+
+test('non-list sections, hero, and nav shapes raise StyleError', () => {
+  assert.throws(
+    () => renderHtml({ title: 'x', sections: {} }),
+    (err) => err.name === 'StyleError' && /"sections" must be a list/.test(err.message) && err.path === 'page.sections'
+  );
+  assert.throws(
+    () => renderHtml({ title: 'x', hero: 'nope', sections: [] }),
+    (err) => err.name === 'StyleError' && /"hero" must be a component list or \{ content: \[\.\.\.\] \}/.test(err.message) && err.path === 'page.hero'
+  );
+  assert.throws(
+    () => renderHtml({ title: 'x', nav: {}, sections: [] }),
+    (err) => err.name === 'StyleError' && /"nav" must be a list of \{ label, href \} items/.test(err.message) && err.path === 'page.nav'
+  );
+});
+
 // ---------------------------------------------------------------------------
 // CSV + JSON inline + file bindings
 // ---------------------------------------------------------------------------
