@@ -1074,6 +1074,27 @@ test('bad JSON raises ParseError', () => {
   );
 });
 
+test('YAML flow-style DSL starting with { or [ parses as YAML, not JSON', () => {
+  // A "{"- or "["-leading document is ambiguous: it could be JSON or YAML
+  // flow style ({title: t}). detectSpec guesses JSON; when JSON.parse fails the
+  // loader must fall back to YAML instead of surfacing a confusing JSON error.
+  const { parseDsl } = require('../lib/loader');
+  const { buildFromSource } = require('../lib/build');
+
+  const data = parseDsl('{title: flow, sections: []}');
+  assert.strictEqual(data.data.title, 'flow');
+  assert.deepStrictEqual(data.data.sections, []);
+
+  // The flow-style source must actually build into a rendered page.
+  const html = buildFromSource('{title: flow, sections: []}', 'flow.yaml');
+  assert.match(html, /<title>flow<\/title>/);
+  assert.ok(html.includes('dg-section'), 'renders the section surface');
+
+  // A BOM before the brace must not break the fallback either.
+  const bom = parseDsl('\uFEFF{title: bom, sections: []}');
+  assert.strictEqual(bom.data.title, 'bom');
+});
+
 // ---------------------------------------------------------------------------
 // Page-level validation (lib/loader.js validatePage)
 // ---------------------------------------------------------------------------
