@@ -616,6 +616,24 @@ test('button and link honour newtab with target/rel', () => {
   assert.match(html, /<a href="https:\/\/link.example.com" class="dg-link" target="_blank" rel="noopener">Away<\/a>/);
 });
 
+test('link with style button renders as a button-styled anchor', () => {
+  // README component table: link takes `style` (`button`) — the renderer must
+  // merge the dg-btn classes onto the dg-link anchor so it looks like a button
+  // without losing its default plain-text appearance.
+  const doc = {
+    title: 'linkbtn',
+    sections: [{
+      content: [
+        { type: 'link', text: 'Docs', href: '#s-docs', style: 'button' },
+        { type: 'link', text: 'Plain', href: '#plain' },
+      ],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<a href="#s-docs" class="dg-link dg-btn dg-btn--primary">Docs<\/a>/);
+  assert.match(html, /<a href="#plain" class="dg-link">Plain<\/a>/);
+});
+
 test('chart and table captions surface as aria-labels and notes', () => {
   // README: table takes a `caption` (rendered as the table aria-label) and
   // chart takes a `caption` (rendered as the figure aria-label plus a visible
