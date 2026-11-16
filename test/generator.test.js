@@ -936,6 +936,83 @@ test('serve picks the port from PORT env, the --port flag, or 4173', () => {
   }
 });
 
+test('dg serve with a missing dir fails with an error', () => {
+  // README CLI: "dg serve [dir]" serves dist/ (or dir). An absent dir must
+  // fail fast with a build-first hint, not start a broken server.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-serve-missing-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+
+  const origWrite = process.stderr.write;
+  const origErr = console.error;
+  const origLog = console.log;
+  const origExit = process.exitCode;
+  let errMsg = '';
+  process.stderr.write = (s) => { errMsg += String(s); return true; };
+  console.error = (s) => { errMsg += String(s); };
+  console.log = () => {};
+  try {
+    cli(['serve']);
+    assert.match(errMsg, /Serve dir missing: .*\. Build first \(dg build\)\./);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 when serve dir is missing');
+  } finally {
+    process.stderr.write = origWrite;
+    console.error = origErr;
+    console.log = origLog;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
+test('dg new with an unknown template fails and scaffolds nothing', () => {
+  // README CLI: templates are landing|table|chart|dashboard|fetch. An unknown
+  // --template must be rejected without creating a directory.
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-unknown-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  let errMsg = '';
+  console.error = (s) => { errMsg += String(s); };
+  try {
+    cli(['new', 'bogus-proj', '--template=bogus']);
+    assert.match(errMsg, /Unknown template "bogus"\. Choose from: landing, table, chart, dashboard, fetch/);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on unknown template');
+    assert.ok(!fs.existsSync(path.join(cwd, 'bogus-proj')), 'no directory scaffolded');
+  } finally {
+    console.error = origErr;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
+test('unknown CLI command fails with an error', () => {
+  // The dispatch default prints an unknown-command error plus help text.
+  const { cli } = require('../lib/cli');
+  const origErr = console.error;
+  const origOut = console.log;
+  const origExit = process.exitCode;
+  let msg = '';
+  let out = '';
+  console.error = (s) => { msg += String(s); };
+  console.log = (s) => { out += String(s); };
+  try {
+    cli(['frobnicate']);
+    assert.match(msg, /Unknown command "frobnicate"\./);
+    assert.match(out, /Usage:/, 'help text printed');
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on unknown command');
+  } finally {
+    console.error = origErr;
+    console.log = origOut;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+  }
+});
+
 test('dg new -t fetch scaffolds a project with fixture, workflow, and deps', () => {
   const { cmdNew } = require('../lib/cli');
   const os = require('node:os');
