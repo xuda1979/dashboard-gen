@@ -261,6 +261,33 @@ test('runtime renders pie from [label, value] array rows', () => {
   assert.ok(out.includes('Organic 45.0%') && out.includes('Paid 30.0%') && out.includes('Referral 25.0%'), 'slice labels show computed shares');
 });
 
+test('runtime drops non-positive pie values and shows no-data when all are non-positive', () => {
+  // Pie slice sources are filtered to values > 0: a zero-value row contributes
+  // no wedge (a 0% slice is noise) and a negative-value row is noise dropped the
+  // same way, with shares computed over the surviving positive total. When every
+  // row is non-positive there is nothing to draw, so the chart must degrade to
+  // the no-data note instead of emitting a hollow (or NaN-laden) svg.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: pie\n        title: Mix\n        data:\n          - [a, 5]\n          - [b, 0]\n          - [c, -3]\n      - type: chart\n        kind: pie\n        title: None\n        data:\n          - [x, 0]\n          - [y, -1]',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'Mix' },
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-1', 'data-chart-title': 'None' },
+  ]);
+  runRuntime(code, dom, { 'chart-0': [['a', 5], ['b', 0], ['c', -3]], 'chart-1': [['x', 0], ['y', -1]] });
+  const mix = figureEls[0].innerHTML;
+  assert.strictEqual((mix.match(/class="dg-slice"/g) || []).length, 1, 'only the positive row draws a slice');
+  assert.ok(mix.includes('>a</span>'), 'surviving slice keeps its legend name');
+  assert.ok(!mix.includes('>b</span>') && !mix.includes('>c</span>'), 'non-positive rows are absent from the legend');
+  assert.ok(mix.includes('a 100.0%'), 'shares recomputed over the positive total');
+  const none = figureEls[1].innerHTML;
+  assert.ok(none.includes('No data to draw'), 'all-non-positive pie shows the no-data note');
+  assert.ok(!none.includes('<svg'), 'no hollow svg for an empty pie');
+  assert.ok(!none.includes('NaN'), 'no NaN leaks into the empty pie');
+});
+
 test('runtime applies custom swatches to slice and legend colors', () => {
   // A swatches map on the chart component is serialized into data-chart-swatches;
   // the runtime must parse it and use the named colors for both the slice fill
