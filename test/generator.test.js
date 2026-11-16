@@ -1693,6 +1693,80 @@ test('build resolves self:// fixtures as local relative paths', () => {
   }
 });
 
+test('build copies flat fixtures, mirrors fixture directories, and skips absolute URLs', () => {
+  // cmdBuild's copyLocalFixtures has three branches the earlier fixture tests
+  // did not pin: a flat URL (no "/") copies next to the page root, a fixture
+  // that is a directory is mirrored recursively, and an absolute http(s) URL
+  // fetches at runtime (nothing is copied).
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-fixture-kinds-'));
+  fs.mkdirSync(path.join(tmp, 'data', 'nested'), { recursive: true });
+  fs.mkdirSync(path.join(tmp, 'deep'), { recursive: true });
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), [
+    'title: t',
+    'sections:',
+    '  - content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: A',
+    '        data: { fetch: "data/market.json" }',
+    '      - type: chart',
+    '        kind: line',
+    '        title: B',
+    '        data: { fetch: "https://api.example.com/remote.json" }',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(tmp, 'data', 'market.json'), '[]');
+  fs.writeFileSync(path.join(tmp, 'deep', 'a.bin'), 'x');
+  fs.writeFileSync(path.join(tmp, 'deep', 'b.csv'), 'y');
+  // A directory fixture mirror: "deep/" maps to dist/deep with contents.
+  fs.writeFileSync(path.join(tmp, 'dg-extra.yaml'), [
+    'title: t',
+    'sections:',
+    '  - content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: C',
+    '        data: { fetch: "deep/" }',
+    '',
+  ].join('\n'));
+
+  const { cmdBuild } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    cmdBuild({ _: ['dg.dsl.yaml'] });
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'data', 'market.json')),
+      'nested fixture mirrored'
+    );
+
+    cmdBuild({ _: ['dg-extra.yaml'], output: 'dir.yaml' }); // exercises dir copy
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'deep', 'a.bin')),
+      'directory fixture contents copied recursively'
+    );
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'deep', 'b.csv')),
+      'second directory fixture file copied'
+    );
+
+    const html = fs.readFileSync(path.join(tmp, 'dist', 'site.html'), 'utf8');
+    assert.ok(
+      html.includes('"https://api.example.com/remote.json"'),
+      'absolute URL kept in the runtime manifest'
+    );
+    assert.ok(!fs.existsSync(path.join(tmp, 'dist', 'remote.json')), 'no remote fixture copied');
+    assert.ok(
+      html.includes('"data/market.json"'),
+      'relative URL embedded in the runtime manifest'
+    );
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Component coverage: paragraph, grid, quote, divider
 // ---------------------------------------------------------------------------
