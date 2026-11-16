@@ -31,7 +31,8 @@ test('a11y-check passes on a generated page (chart example)', () => {
   const res = runCheck(file);
   assert.strictEqual(res.ok, true, `expected pass, got code ${res.code}: ${res.stderr}`);
   assert.match(res.stdout, /\[a11y-check\] OK/, 'reports OK');
-  assert.match(res.stdout, /charts with role="img": \d+/, 'reports chart count');
+  assert.match(res.stdout, /contrast \(light\): [0-9.]+:1/, 'reports a measured light contrast ratio');
+  assert.match(res.stdout, /passes AA \(4\.5:1\)/, 'default palette passes AA');
 });
 
 test('a11y-check fails with diagnostics on a page missing main/nav/skip', () => {
@@ -58,4 +59,27 @@ test('a11y-check fails with diagnostics on a page missing main/nav/skip', () => 
   assert.match(res.stderr, /no <nav> with aria-label/);
   assert.match(res.stderr, /missing skip link to #main/);
   assert.match(res.stderr, /<img> missing alt:/);
+});
+
+test('a11y-check fails when the page theme has insufficient contrast', () => {
+  // theme pair #ffffff on #f5f5f5 computes ~1.1:1, far below the AA 4.5:1
+  // threshold for body text, so the lint must fail with the measured ratio.
+  const src =
+    'title: t\n' +
+    'theme:\n' +
+    '  pageBg: "#ffffff"\n' +
+    '  textColor: "#f5f5f5"\n' +
+    'sections:\n' +
+    '  - title: S\n' +
+    '    content:\n' +
+    '      - type: paragraph\n' +
+    '        text: hi\n';
+  const html = buildFromSource(src, 'low-contrast.yaml');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-contrast-'));
+  const file = path.join(tmp, 'page.html');
+  fs.writeFileSync(file, html);
+  const res = runCheck(file);
+  assert.strictEqual(res.ok, false, 'expected failure for low contrast');
+  assert.strictEqual(res.code, 1, 'exit code 1');
+  assert.match(res.stderr, /contrast \(light\): 1\.\d+:1 below AA 4\.5:1/, 'reports the failing ratio');
 });

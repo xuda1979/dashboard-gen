@@ -8,7 +8,8 @@
 // - every <figure role="img"> has an aria-label (or desc) when it carries
 //   a chart role
 // - heading levels do not skip more than one level
-// - contrast note: report tokens to the user
+// - contrast: measure the theme token palettes (light + dark) against the
+//   WCAG AA body-text threshold (4.5:1)
 //
 // Usage:
 //   node scripts/a11y-check.mjs dist/chart.html
@@ -87,12 +88,48 @@ for (const l of levels) {
 }
 warnings.push(`heading levels used: ${[...new Set(levels)].sort().join(', ') || 'none'}`);
 
-// 8. contrast note: report the default/theme page-bg vs text-color (best-effort)
-const bg = /\-\-page-bg: (#[0-9a-fA-F]{3,8}|[a-z]+)/.exec(html);
-const tc = /\-\-text-color: (#[0-9a-fA-F]{3,8}|[a-z]+)/.exec(html);
-warnings.push(
-  `contrast note: page-bg=${bg ? bg[1] : 'default'} text-color=${tc ? tc[1] : 'default'} — verify AA (4.5:1) for body text; tokens are tailwind-like and configurable via theme:`
-);
+// 8. contrast: compute the actual WCAG 2.x contrast ratio from the theme
+//    tokens (light palette in :root, dark palette in the prefers-color-scheme
+//    media block). Each measured palette is checked against the AA body-text
+//    threshold (4.5:1); a palette with a non-hex token falls back to a note.
+function rgbLuminance(hex) {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return null;
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16) / 255);
+  const lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+function contrastRatio(a, b) {
+  const la = rgbLuminance(a);
+  const lb = rgbLuminance(b);
+  if (la === null || lb === null) return null;
+  const [hi, lo] = la >= lb ? [la, lb] : [lb, la];
+  return (hi + 0.05) / (lo + 0.05);
+}
+
+function checkPalette(label, pageBg, textColor) {
+  if (!pageBg || !textColor) return;
+  const ratio = contrastRatio(pageBg, textColor);
+  if (ratio === null) {
+    warnings.push(
+      `contrast (${label}): tokens not hex (page-bg=${pageBg} text-color=${textColor}) — verify AA (4.5:1)`
+    );
+  } else if (ratio < 4.5) {
+    problems.push(
+      `contrast (${label}): ${ratio.toFixed(2)}:1 below AA 4.5:1 (page-bg=${pageBg} text-color=${textColor}; configurable via theme:)`
+    );
+  } else {
+    warnings.push(
+      `contrast (${label}): ${ratio.toFixed(2)}:1 (page-bg=${pageBg} text-color=${textColor}) — passes AA (4.5:1)`
+    );
+  }
+}
+
+const bgs = [...html.matchAll(/\-\-page-bg: (#[0-9a-fA-F]{3,8}|[a-z]+)/g)].map((m) => m[1]);
+const tcs = [...html.matchAll(/\-\-text-color: (#[0-9a-fA-F]{3,8}|[a-z]+)/g)].map((m) => m[1]);
+if (bgs.length) checkPalette('light', bgs[0], tcs[0]);
+if (bgs.length > 1 && tcs.length > 1) checkPalette('dark', bgs[1], tcs[1]);
 
 // 9. no external resources: offline requirement is about *fetched assets*
 //    (scripts/styles/fonts), not plain text links in page content.
