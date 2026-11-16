@@ -176,6 +176,23 @@ test('css tokens are emitted in kebab-case so pages are actually styled', () => 
   assert.ok(!html.includes('--pageBg:'), 'no camelCase token leftovers');
 });
 
+test('custom theme tokens override defaults as page CSS variables', () => {
+  // README page schema: `theme:` carries optional Tailwind-like CSS tokens
+  // (accent/radius). They must surface as kebab-case custom properties that
+  // the component styles reference, not as a dead config object.
+  const doc = {
+    title: 'theme',
+    theme: { accent: '#0ea5e9', radius: '6px' },
+    sections: [],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /--accent: #0ea5e9;/);
+  assert.match(html, /--radius: 6px;/);
+  assert.match(html, /\.dg-btn--primary \{ background: var\(--accent\)/);
+  assert.match(html, /\.dg-card \{ background: var\(--card-bg\); border: 1px solid var\(--border-color\); border-radius: var\(--radius\)/);
+  assert.ok(!/--accent:\s*$/.test(html), 'accent token is populated, not empty');
+});
+
 test('every chart figure carries a role and accessible name', () => {
   const html = buildFixture('chart');
   const figures = html.match(/<div class="dg-figure dg-chart"[^>]*>/g) || [];
