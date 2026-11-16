@@ -372,6 +372,27 @@ test('runtime honors numeric start as the line chart baseline', () => {
   assert.ok(Math.max(...anchored) > Math.max(...base), 'lower baseline shifts the polyline down');
 });
 
+test('runtime centers a single-point line instead of dividing by zero', () => {
+  // With one data point the x-scale has no span, so the naive x(i) formula
+  // would divide by (points.length - 1) = 0 and leak NaN coordinates. The
+  // runtime must center the lone point (and its x-axis label) in the plot
+  // instead, keeping the series path and everything else NaN-free.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Solo\n        data:\n          - { label: Only, series: { t: 20 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Solo' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'Only', series: { t: 20 } }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('<svg'), 'single point still produces an svg');
+  assert.ok(/<path class="dg-series" d="M398\.0 \d+\.\d+/.test(out),
+    'the lone point is centered horizontally at x=398 (plot mid)');
+  assert.ok(/<text class="dg-axis dg-axis-x" x="398" /.test(out), 'the x-label sits at the same centered x');
+  assert.ok(out.includes('>t</span>'), 'legend names the single series');
+  assert.ok(!/<path class="dg-series" d="[^"]*NaN|NaN/.test(out), 'no NaN leaks into the single-point chart');
+});
+
 test('runtime scales line chart by data range, not numeric x-labels', () => {
   // Numeric x-labels (years, timestamps) used to be mistaken for a y-axis
   // anchor: min = first label set the baseline above every series value, which
