@@ -284,6 +284,81 @@ test('runtime extracts fetch specs and attempts fetch for missing data', async (
   assert.strictEqual(fetched, 'market.json');
 });
 
+test('runtime draws a line chart from fetch-resolved array data', async () => {
+  // init() fetches only when the store has no rows for the figure's id; on
+  // success it stashes the resolved JSON in window.__DG_DATA__ and re-renders
+  // with renderOne. This pins the happy path: resolved rows must draw, never
+  // the no-data note and never the fetch-failure message.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'fetch.yaml'), 'utf8');
+  const html = buildFromSource(src, 'fetch.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Widget price (USD)' },
+  ]);
+  const rows = [
+    { label: '2024-01', series: { price: 120 } },
+    { label: '2024-02', series: { price: 132 } },
+    { label: '2024-03', series: { price: 128 } },
+  ];
+  let fetched = null;
+  const myFetch = (url) => { fetched = url; return Promise.resolve({ ok: true, json: () => Promise.resolve(rows) }); };
+  const sandbox = {
+    document: dom,
+    console,
+    fetch: myFetch,
+    Promise,
+    setTimeout,
+    clearTimeout,
+  };
+  sandbox.window = sandbox;
+  sandbox.window.__DG_DATA__ = {};
+  const fn = new Function('window', 'document', 'fetch', code);
+  fn.call(sandbox.window, sandbox.window, sandbox.document, myFetch);
+  await new Promise((r) => setTimeout(r, 0));
+
+  assert.strictEqual(fetched, 'market.json', 'runtime fetches the embedded fixture url');
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('<svg'), 'fetched data produced an svg');
+  assert.ok(out.includes('class="dg-series"'), 'fetched rows are drawn as a series path');
+  assert.ok(out.includes('price'), 'legend uses the fetched series name');
+  assert.ok(!out.includes('No data to draw'), 'chart is not left empty');
+  assert.ok(!out.includes('Failed to load chart data'), 'resolved fetch shows no error');
+});
+
+test('runtime draws from a fetch response wrapped as {data: rows}', async () => {
+  // Some endpoints return {data: [...]} instead of a bare array; init supports
+  // both shapes when it stashes the resolved JSON. The wrapper must unwrap.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'fetch.yaml'), 'utf8');
+  const html = buildFromSource(src, 'fetch.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Widget price (USD)' },
+  ]);
+  const myFetch = () => Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({ data: [{ label: 'Jan', series: { price: 10 } }, { label: 'Feb', series: { price: 14 } }] }),
+  });
+  const sandbox = {
+    document: dom,
+    console,
+    fetch: myFetch,
+    Promise,
+    setTimeout,
+    clearTimeout,
+  };
+  sandbox.window = sandbox;
+  sandbox.window.__DG_DATA__ = {};
+  const fn = new Function('window', 'document', 'fetch', code);
+  fn.call(sandbox.window, sandbox.window, sandbox.document, myFetch);
+  await new Promise((r) => setTimeout(r, 0));
+
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('class="dg-series"'), 'wrapper rows drawn as a series path');
+  assert.ok(!out.includes('No data to draw'), 'wrapper data is not treated as empty');
+});
+
 test('runtime shows a load error when a fetched chart fails', async () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'fetch.yaml'), 'utf8');
   const html = buildFromSource(src, 'fetch.yaml', { fileDir: 'examples' });
