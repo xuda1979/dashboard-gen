@@ -137,6 +137,33 @@ test('watch mode rebuilds when DSL changes', async () => {
   }
 });
 
+test('watch mode honors DG_OUTPUT filename override', () => {
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-out-'));
+  const src = path.join(tmp, 'site.yaml');
+  fs.writeFileSync(src, 'title: out\nsections: []\n');
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origOut = process.env.DG_OUTPUT;
+  process.env.DG_OUTPUT = 'index.html';
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'));
+    // the initial build runs synchronously, so the override file exists now
+    assert.ok(fs.existsSync(path.join(tmp, 'dist', 'index.html')), 'DG_OUTPUT file built');
+    assert.ok(!fs.existsSync(path.join(tmp, 'dist', 'site.html')), 'default name not written');
+    assert.ok(fs.readFileSync(path.join(tmp, 'dist', 'index.html'), 'utf8').includes('out'));
+  } finally {
+    if (watcher) watcher.close();
+    if (origOut === undefined) delete process.env.DG_OUTPUT;
+    else process.env.DG_OUTPUT = origOut;
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Accessibility + no-external-resource (AC2/AC5 invariants on every example)
 // ---------------------------------------------------------------------------
