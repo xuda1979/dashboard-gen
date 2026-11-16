@@ -118,6 +118,60 @@ test('runtime shows no-data note when chart has empty data', () => {
   assert.ok(figureEls[0].innerHTML.includes('No data to draw'), 'shows no-data note');
 });
 
+test('runtime honors numeric start as the line chart baseline', () => {
+  // `start` is documented on the chart component. It was parsed into
+  // data-chart-start but never applied; a numeric value must pin the y-axis
+  // baseline, so the polyline position changes when it is present.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Temp\n        data:\n          - { label: Jan, series: { t: 20 } }\n          - { label: Feb, series: { t: 24 } }\n          - { label: Mar, series: { t: 28 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const data = { 'chart-0': [{ label: 'Jan', series: { t: 20 } }, { label: 'Feb', series: { t: 24 } }, { label: 'Mar', series: { t: 28 } }] };
+
+  function ysFor(fig) {
+    const { dom, figureEls } = makeDom([fig]);
+    runRuntime(code, dom, data);
+    const out = figureEls[0].innerHTML;
+    const d = /<path class="dg-series" d="([^"]+)"/.exec(out);
+    assert.ok(d, 'line chart produced a series path');
+    const nums = d[1].match(/-?\d+(\.\d+)?/g).map(Number);
+    return nums.filter((_, i) => i % 2 === 1);
+  }
+
+  const base = ysFor({ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Temp' });
+  const anchored = ysFor({ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Temp', 'data-chart-start': '10' });
+  assert.notDeepStrictEqual(anchored, base, 'numeric start re-anchors the y-axis baseline');
+  // Anchoring the baseline to 10 (below the 20-28 data) widens the y range, so
+  // the line sits lower on the plot than with the data-only range: y grows
+  // downward in SVG.
+  assert.ok(Math.max(...anchored) > Math.max(...base), 'lower baseline shifts the polyline down');
+});
+
+test('runtime scales line chart by data range, not numeric x-labels', () => {
+  // Numeric x-labels (years, timestamps) used to be mistaken for a y-axis
+  // anchor: min = first label set the baseline above every series value, which
+  // inverted the range and flattened the polyline into the top of the plot.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Temp\n        data:\n          - label: 2023\n            series: { t: 20 }\n          - label: 2024\n            series: { t: 24 }\n          - label: 2025\n            series: { t: 28 }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Temp' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 2023, series: { t: 20 } }, { label: 2024, series: { t: 24 } }, { label: 2025, series: { t: 28 } }] });
+  const out = figureEls[0].innerHTML;
+  const d = /<path class="dg-series" d="([^"]+)"/.exec(out);
+  assert.ok(d, 'line chart produced a series path');
+  const ys = d[1].match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+  assert.strictEqual(ys.length, 3, 'one point per row');
+  // Plot area is y 22..300. The data values (20..28) must produce a line that
+  // spans a visible range inside it — the regression squashed it flat above the
+  // plot (all ys < 22, spread ~1px).
+  const spread = Math.max(...ys) - Math.min(...ys);
+  assert.ok(spread > 10, `line spans the data range (y spread ${spread.toFixed(1)}px)`);
+  assert.ok(Math.min(...ys) >= 22, 'polyline stays inside the plot area');
+});
+
 test('runtime extracts fetch specs and attempts fetch for missing data', async () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'fetch.yaml'), 'utf8');
   const html = buildFromSource(src, 'fetch.yaml', { fileDir: 'examples' });
