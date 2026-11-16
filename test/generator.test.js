@@ -420,6 +420,20 @@ test('chart start option is emitted as a data-chart-start attribute', () => {
   assert.ok(!/data-chart-start="/.test(without), 'no data-chart-start without start:');
 });
 
+test('unknown chart kind falls back to line with a Chart label', () => {
+  // renderChart treats only line/bar/pie as valid; anything else (typo, future
+  // kind) must degrade to the line shell so the figure still renders.
+  const doc = {
+    title: 't',
+    sections: [{ content: [{ type: 'chart', kind: 'bogus', title: 'Weird', data: [['Q1', 4]] }] }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /data-chart-type="line"/,
+    'unknown kind falls back to line, not an invalid attribute');
+  const label = html.match(/class="dg-figure dg-chart"[^>]*aria-label="([^"]+)"/);
+  assert.ok(label && label[1].startsWith('Weird'), `aria-label stays ${label && label[1]}`);
+});
+
 test('chart source attribute equals the fetch url (used by the runtime)', () => {
   const doc = {
     title: 't',
