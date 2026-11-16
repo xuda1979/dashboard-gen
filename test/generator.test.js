@@ -715,6 +715,17 @@ test('inline CSV data binds to chart store', () => {
   assert.match(html, /window\.__DG_DATA__ = \{.*"Q1"/);
 });
 
+test('inline JSON data binds to chart store', () => {
+  const doc = {
+    title: 't',
+    sections: [{
+      content: [{ type: 'chart', kind: 'bar', data: { json: [{ label: 'a', v: 1 }, { label: 'b', v: 2 }] } }],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /window\.__DG_DATA__ = \{"chart-0":\[\{"label":"a","v":1\},\{"label":"b","v":2\}\]\}/);
+});
+
 test('local data file binding is resolved into the store', () => {
   const tmp = path.join(ExampleTmp(), 'data');
   const fileDir = path.join(tmp, 'fixtures');
