@@ -500,6 +500,47 @@ test('dg build fails cleanly when the output path is a directory, not a file', (
 // Accessibility + no-external-resource (AC2/AC5 invariants on every example)
 // ---------------------------------------------------------------------------
 
+test('dg build fails cleanly when a plain file squats on the output directory', () => {
+  // A plain file where dist/ should be makes mkdirSync throw a raw EEXIST
+  // stack; buildOne must reject it with the same one-line DashboardError style
+  // used for a directory output path. Watch shares buildOne via runBuild, so it
+  // must surface the same clean diagnostic.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-outdirfile-'));
+  fs.writeFileSync(path.join(tmp, 'site.yaml'), 'title: t\nsections: []\n');
+  fs.writeFileSync(path.join(tmp, 'dist'), 'x'); // plain file named dist
+
+  const { cli, watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origWrite = process.stderr.write;
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  process.chdir(tmp);
+  let errMsg = '';
+  process.stderr.write = (s) => { errMsg += String(s); return true; };
+  console.error = (s) => { errMsg += String(s); };
+  let watcher;
+  try {
+    cli(['build', 'site.yaml']);
+    assert.match(errMsg, /Output directory is a file, not a directory: dist/);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on a file squatted output dir');
+    assert.ok(!/EEXIST|\bat /.test(errMsg), 'no raw fs stack trace leaks through');
+
+    errMsg = '';
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    watcher = watch(path.resolve('site.yaml'));
+    assert.match(errMsg, /Output directory is a file, not a directory: dist/);
+    assert.ok(!/EEXIST|\bat /.test(errMsg), 'watch reports the same clean diagnostic');
+    assert.strictEqual(process.exitCode, 1, 'watch sets a failing exit code too');
+  } finally {
+    process.stderr.write = origWrite;
+    console.error = origErr;
+    if (watcher) watcher.close();
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('css tokens are emitted in kebab-case so pages are actually styled', () => {
   const html = buildFixture('landing');
   assert.match(html, /--page-bg: #f6f8fa;/);
