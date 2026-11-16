@@ -844,6 +844,41 @@ test('dg new -t fetch scaffolds a project with fixture, workflow, and deps', () 
   }
 });
 
+test('dg new defaults to the landing template and the scaffold builds', () => {
+  const { cmdNew, cmdBuild } = require('../lib/cli');
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-landing-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    cmdNew({ _: ['lan'] }); // no --template => landing
+    const dslPath = path.join(cwd, 'lan', 'dg.dsl.yaml');
+    assert.ok(fs.existsSync(dslPath), 'landing DSL scaffolded');
+    const dsl = fs.readFileSync(dslPath, 'utf8');
+    assert.match(dsl, /layout:\s+landing/);
+    assert.doesNotMatch(
+      dsl,
+      /fetch:/,
+      'landing template binds no runtime fetch fixture'
+    );
+    assert.ok(!fs.existsSync(path.join(cwd, 'lan', 'market.json')), 'no fetch fixture for landing');
+    assert.ok(fs.existsSync(path.join(cwd, 'lan', '.github', 'workflows', 'pages.yml')));
+    const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'lan', 'package.json'), 'utf8'));
+    assert.match(pkg.scripts.build, /dg build dg\.dsl\.yaml/);
+    assert.match(pkg.scripts.serve, /dg serve/);
+    assert.ok(pkg.dependencies && pkg.dependencies['dashboard-gen']);
+
+    // The scaffolded page must build and render the landing layout. A DSL
+    // file named dg.dsl.yaml builds to dist/site.html.
+    cmdBuild({ _: [dslPath] });
+    const html = fs.readFileSync(path.join(cwd, 'dist', 'site.html'), 'utf8');
+    assert.match(html, /<section class="dg-section">/, 'landing renders stacked sections');
+    assert.match(html, /Your data, shipped in one YAML file/, 'hero headline rendered');
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 test('dg new --template=<t> is accepted', () => {
   const { cmdNew } = require('../lib/cli');
   const os = require('node:os');
