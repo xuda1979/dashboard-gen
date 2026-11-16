@@ -755,3 +755,29 @@ test('runtime derives series colors from a deterministic palette hash when no sw
   assert.strictEqual(revColor1, color0a, 'same series name colors identically across charts');
   assert.ok(out1.includes(`background:${revColor1}`), 'chart two legend swatch matches too');
 });
+
+test('runtime falls back to the palette when data-chart-swatches is invalid JSON', () => {
+  // data-chart-swatches mirrors a serialized swatches map, but a hand-edited or
+  // mismatched page could carry malformed JSON there. The parse must not throw
+  // or poison the chart: it falls back to the deterministic palette hash, and
+  // every series still draws with a valid color.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Trend\n        data:\n          - { label: Jan, series: { a: 10, b: 4 } }\n          - { label: Feb, series: { a: 14, b: 6 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Trend', 'data-chart-swatches': '{oops: not json' },
+  ]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'Jan', series: { a: 10, b: 4 } }, { label: 'Feb', series: { a: 14, b: 6 } }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('<svg'), 'chart still renders with malformed swatches');
+  const strokes = out.match(/<path class="dg-series" d="[^"]+" fill="none" stroke="(#[0-9a-f]{6})"/g) || [];
+  assert.strictEqual(strokes.length, 2, 'both series drew');
+  for (const s of strokes) {
+    const hex = s.match(/#[0-9a-f]{6}/)[0];
+    assert.match(hex, /^#(3b82f6|a855f7|f59e0b|10b981|ef4444|8b5cf6|14b8a6|f97316)$/, `stroke ${hex} comes from the palette`);
+  }
+  assert.ok(!out.includes('Chart data parse failed'), 'no parse error banner');
+  assert.ok(!out.includes('NaN'), 'no NaN leaks');
+});
