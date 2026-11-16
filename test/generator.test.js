@@ -1447,8 +1447,9 @@ test('serve blocks percent-encoded traversal and sibling-prefix escapes', async 
 test('serve answers 404 for missing files and sets content types by extension', async () => {
   // The static-file path past the traversal/encoding guards: an absent file
   // must be a 404 with text/plain (a build hint), while served files carry a
-  // per-extension Content-Type (.html/.json/.csv) and unknown extensions fall
-  // back to application/octet-stream. None of these paths were pinned before.
+  // per-extension Content-Type (.html/.json/.csv/.js/.css/.png/.svg) and
+  // unknown extensions fall back to application/octet-stream. None of these
+  // paths were pinned before.
   const { cmdServe } = require('../lib/cli');
   const http = require('node:http');
   const os = require('node:os');
@@ -1457,6 +1458,10 @@ test('serve answers 404 for missing files and sets content types by extension', 
   fs.writeFileSync(path.join(root, 'a.json'), '[]');
   fs.writeFileSync(path.join(root, 'a.csv'), 'x,y');
   fs.writeFileSync(path.join(root, 'a.xyz'), 'raw');
+  fs.writeFileSync(path.join(root, 'a.js'), 'console.log(1)');
+  fs.writeFileSync(path.join(root, 'a.css'), 'body{}');
+  fs.writeFileSync(path.join(root, 'a.png'), 'png');
+  fs.writeFileSync(path.join(root, 'a.svg'), '<svg/>');
 
   const origLog = console.log;
   console.log = () => {};
@@ -1482,6 +1487,10 @@ test('serve answers 404 for missing files and sets content types by extension', 
     const json = await get('/a.json');
     const csv = await get('/a.csv');
     const raw = await get('/a.xyz');
+    const js = await get('/a.js');
+    const css = await get('/a.css');
+    const png = await get('/a.png');
+    const svg = await get('/a.svg');
     const miss = await get('/nope.html');
     assert.strictEqual(html.status, 200);
     assert.strictEqual(html.type, 'text/html; charset=utf-8');
@@ -1491,6 +1500,14 @@ test('serve answers 404 for missing files and sets content types by extension', 
     assert.strictEqual(csv.type, 'text/plain; charset=utf-8');
     assert.strictEqual(raw.status, 200);
     assert.strictEqual(raw.type, 'application/octet-stream', 'unknown extension falls back');
+    assert.strictEqual(js.status, 200);
+    assert.strictEqual(js.type, 'text/javascript; charset=utf-8');
+    assert.strictEqual(css.status, 200);
+    assert.strictEqual(css.type, 'text/css; charset=utf-8');
+    assert.strictEqual(png.status, 200);
+    assert.strictEqual(png.type, 'image/png');
+    assert.strictEqual(svg.status, 200);
+    assert.strictEqual(svg.type, 'image/svg+xml');
     assert.strictEqual(miss.status, 404, 'missing file is 404');
     assert.strictEqual(miss.type, 'text/plain');
     assert.strictEqual(miss.body, 'not found');
