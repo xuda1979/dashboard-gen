@@ -202,6 +202,56 @@ test('watch mode honors DG_OUTPUT filename override', () => {
   }
 });
 
+test('cmdWatch restart releases the previous watcher and leaves a live one', async () => {
+  // cmdWatch calls stopWatchers() before starting a fresh watch. Two watchers
+  // share the same parent dir and output only differ by DG_OUTPUT, so the
+  // released one is detectable: it must NOT rebuild its own output file after a
+  // change while the new watcher's file still updates.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-cmd-'));
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), 'title: one\nsections: []\n');
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { cmdWatch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origExit = process.exitCode;
+  const origOut = process.env.DG_OUTPUT;
+  process.chdir(tmp);
+  let watcher2;
+  try {
+    // first watch target
+    process.env.DG_OUTPUT = 'a.html';
+    cmdWatch({ _: [] });
+    const aHtml = path.join(tmp, 'dist', 'a.html');
+    assert.ok(fs.existsSync(aHtml), 'first watcher built its output');
+    assert.ok(fs.readFileSync(aHtml, 'utf8').includes('one'));
+
+    // restart with a different output name: this must release the first watcher
+    process.env.DG_OUTPUT = 'b.html';
+    watcher2 = cmdWatch({ _: [] });
+    const bHtml = path.join(tmp, 'dist', 'b.html');
+    assert.ok(fs.existsSync(bHtml), 'restarted watcher built its output');
+
+    fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), 'title: two\nsections: []\n');
+    let rebuilt = false;
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (fs.readFileSync(bHtml, 'utf8').includes('two')) { rebuilt = true; break; }
+    }
+    assert.ok(rebuilt, 'restarted watcher is live and rebuilds on change');
+    await new Promise((r) => setTimeout(r, 250)); // let any stale watcher events settle
+    const aAfter = fs.readFileSync(aHtml, 'utf8');
+    assert.ok(aAfter.includes('one'), 'first watcher output keeps its old build');
+    assert.ok(!aAfter.includes('two'), 'released watcher no longer rebuilds');
+  } finally {
+    if (watcher2) watcher2.close();
+    if (origOut === undefined) delete process.env.DG_OUTPUT;
+    else process.env.DG_OUTPUT = origOut;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('watch mode reports a failed initial build cleanly instead of crashing', () => {
   // The initial build runs synchronously inside watch(); a DSL that fails the
   // build (here an unknown component type) must surface through the same
