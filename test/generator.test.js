@@ -1541,6 +1541,36 @@ test('table header:false treats numeric first rows as body data', () => {
   assert.ok(!html.includes('<thead>'), 'no header row is emitted');
 });
 
+test('table numeric first row is body data by default, header:true forces it', () => {
+  // A label+value row like [2026, 42] or ["Q1", 10] is data: without a `header`
+  // key the first row must not be promoted to <thead>. `header: true` still
+  // forces the first row to be the header.
+  const html = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{ type: 'table', rows: [[2026, 42], [2025, 38]] }],
+    }],
+  });
+  assert.match(
+    html,
+    /<table class="dg-table"><tbody><tr><th scope="row">2026<\/th><td>42<\/td><\/tr><tr><th scope="row">2025<\/th><td>38<\/td><\/tr><\/tbody><\/table>/,
+    'numeric first row stays in the body as a row header'
+  );
+  assert.ok(!html.includes('<thead>'), 'no auto header for a numeric first row');
+
+  const forced = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{ type: 'table', header: true, rows: [[2026, 42], [2025, 38]] }],
+    }],
+  });
+  assert.match(
+    forced,
+    /<thead><tr><th scope="col">2026<\/th><th scope="col">42<\/th><\/tr><\/thead><tbody><tr><td>2025<\/td><td>38<\/td><\/tr><\/tbody>/,
+    'header: true forces the first row into the header'
+  );
+});
+
 test('table object rows render union-of-keys header and cells', () => {
   // rowsToTableData falls back to object rows: the header is the union of the
   // objects keys in first-seen order, and each row aligns to that order.
