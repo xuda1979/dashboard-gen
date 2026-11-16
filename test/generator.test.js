@@ -1002,6 +1002,72 @@ test('CSV data file binding is parsed into rows at build time', () => {
   assert.match(html, /window\.__DG_DATA__ = \{"chart-0":\[\["label","val"\],\["Q1","4"\],\["Q2","9"\]\]\}/);
 });
 
+test('file binding validation errors raise DataFileError with the chart file path', () => {
+  const fileDir = path.join(ExampleTmp(), 'err-fixtures');
+  fs.mkdirSync(fileDir, { recursive: true });
+  const chart = (extra) => ({
+    title: 't',
+    sections: [{ content: [{ type: 'chart', kind: 'line', ...extra }] }],
+  });
+
+  // chart with no data and no file is legal (runtime "no data"), but an empty
+  // file path, an unreadable file, malformed JSON, and a bad extension fail.
+  assert.throws(
+    () => renderHtml(chart({ file: '' }), { fileDir }),
+    (err) => err.name === 'DataFileError'
+      && /file" must be a non-empty path/.test(err.message)
+      && err.path === 'page.sections[0].content.file'
+  );
+  assert.throws(
+    () => renderHtml(chart({ file: 'missing.json' }), { fileDir }),
+    (err) => err.name === 'DataFileError'
+      && /Could not read data file "missing\.json" \(ENOENT\)/.test(err.message)
+      && err.path === 'page.sections[0].content.file'
+  );
+  fs.writeFileSync(path.join(fileDir, 'bad.json'), '{ nope');
+  assert.throws(
+    () => renderHtml(chart({ file: 'bad.json' }), { fileDir }),
+    (err) => err.name === 'DataFileError'
+      && /"bad\.json" is not valid JSON/.test(err.message)
+      && err.path === 'page.sections[0].content.file'
+  );
+  fs.writeFileSync(path.join(fileDir, 'data.txt'), 'x');
+  assert.throws(
+    () => renderHtml(chart({ file: 'data.txt' }), { fileDir }),
+    (err) => err.name === 'DataFileError'
+      && /Unsupported data file extension "\.txt"/.test(err.message)
+      && err.path === 'page.sections[0].content.file'
+  );
+});
+
+test('chart with unsupported data shape raises StyleError at the data path', () => {
+  // data may be inline rows, { csv }, { json }, { fetch }, or a file: binding
+  // — any other shape (here a bare mapping) must fail loudly, not silently
+  // render an empty chart.
+  const doc = {
+    title: 't',
+    sections: [{ content: [{ type: 'chart', kind: 'line', data: { bogus: 1 } }] }],
+  };
+  assert.throws(
+    () => renderHtml(doc),
+    (err) => err.name === 'StyleError'
+      && /chart "data" must be inline rows/.test(err.message)
+      && err.path === 'page.sections[0].content.data'
+  );
+});
+
+test('content item without a string type raises StyleError', () => {
+  // renderComponents requires every section content item to carry a "type";
+  // a stray non-object or typeless entry must fail at build time.
+  const doc = { title: 't', sections: [{ content: [42] }] };
+  assert.throws(
+    () => renderHtml(doc),
+    (err) => err.name === 'StyleError'
+      && /Every content item must be an object with a "type"/.test(err.message)
+      && err.path === 'component'
+  );
+});
+
 function ExampleTmp() {
   const os = require('node:os');
   return fs.mkdtempSync(path.join(os.tmpdir(), 'dg-fixture-'));
