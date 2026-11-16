@@ -137,6 +137,44 @@ test('watch mode rebuilds when DSL changes', async () => {
   }
 });
 
+test('watch mode survives delete+recreate of the DSL file (editor-style save)', async () => {
+  // Editors replace a file via rename/delete+create; the watcher watches the
+  // parent dir and must treat the resulting events (null-filename or otherwise)
+  // as changes, staying alive long enough to pick up the recreated file. The
+  // intermediate deleted-state build legitimately fails; what must hold is that
+  // the *next* build runs with the new content.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-del-'));
+  const src = path.join(tmp, 'site.yaml');
+  const out = path.join(tmp, 'dist', 'site.html');
+  fs.writeFileSync(src, 'title: v1\nsections: []\n');
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origExit = process.exitCode;
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'));
+    await new Promise((r) => setTimeout(r, 250)); // initial build
+    fs.unlinkSync(src);
+    fs.writeFileSync(src, 'title: v3\nsections: []\n');
+    let rebuilt = false;
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (fs.readFileSync(out, 'utf8').includes('v3')) { rebuilt = true; break; }
+    }
+    assert.ok(rebuilt, 'watch rebuilt after delete+recreate');
+  } finally {
+    if (watcher) watcher.close();
+    // The deleted-state build fails the rebuild and sets process.exitCode via
+    // errorOut; restore it so this test file still exits 0.
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('watch mode honors DG_OUTPUT filename override', () => {
   const os = require('node:os');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-out-'));
