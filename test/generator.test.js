@@ -1885,6 +1885,29 @@ test('dg new accepts the space-separated --template flag through cli dispatch', 
   }
 });
 
+test('dg new accepts the short -t template flag through cli dispatch', () => {
+  // `-t <template>` is the short form the arg parser accepts alongside
+  // --template. The existing -t test calls cmdNew directly with a preset map,
+  // so the parseArgs value branch (a starts-with-dash short flag followed by a
+  // non-dash value) has no coverage through cli() dispatch.
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new5-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  const origExit = process.exitCode;
+  try {
+    cli(['new', 'shortsite', '-t', 'chart']);
+    assert.strictEqual(process.exitCode, origExit === undefined ? 0 : origExit, 'no exit code set');
+    const dsl = fs.readFileSync(path.join(cwd, 'shortsite', 'dg.dsl.yaml'), 'utf8');
+    assert.match(dsl, /kind: line/, 'chart template scaffolded via -t chart');
+    assert.ok(fs.existsSync(path.join(cwd, 'shortsite', '.github', 'workflows', 'pages.yml')), 'workflow included');
+  } finally {
+    process.chdir(origCwd);
+    process.exitCode = origExit === undefined ? 0 : origExit;
+  }
+});
+
 test('dg new applies the chart template distinctly from landing', () => {
   // Sanity: the chart template ships chart components rather than the landing
   // hero, so the --template flag selects real, distinct content per template.
