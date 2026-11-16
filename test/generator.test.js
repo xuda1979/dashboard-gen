@@ -776,6 +776,51 @@ test('serve resolves nested paths inside the served dir and blocks traversal', a
   }
 });
 
+test('serve picks the port from PORT env, the --port flag, or 4173', () => {
+  const { cmdServe } = require('../lib/cli');
+  const http = require('node:http');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-port-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<h1>port</h1>');
+
+  const origLog = console.log;
+  console.log = () => {}; // silence "serving ..." banner
+  const origListen = http.Server.prototype.listen;
+  const origPort = process.env.PORT;
+  const ports = [];
+  // Record the port cmdServe passes to listen(), then bind an ephemeral port
+  // instead so the assertions never collide with a real fixed port.
+  http.Server.prototype.listen = function (port) {
+    ports.push(port);
+    return origListen.call(this, 0);
+  };
+  try {
+    const a = cmdServe({ _: [root] });
+    assert.strictEqual(ports[0], 4173, 'defaults to the documented 4173');
+    a.close();
+
+    process.env.PORT = '0';
+    const b = cmdServe({ _: [root] });
+    assert.strictEqual(ports[1], 0, 'PORT env overrides the default');
+    b.close();
+
+    process.env.PORT = '0';
+    const c = cmdServe({ _: [root], port: '41730' });
+    assert.strictEqual(ports[2], 0, 'PORT env wins over the --port flag');
+    c.close();
+
+    delete process.env.PORT;
+    const d = cmdServe({ _: [root], port: '0' });
+    assert.strictEqual(ports[3], 0, '--port flag applies without PORT env');
+    d.close();
+  } finally {
+    console.log = origLog;
+    http.Server.prototype.listen = origListen;
+    if (origPort === undefined) delete process.env.PORT;
+    else process.env.PORT = origPort;
+  }
+});
+
 test('dg new -t fetch scaffolds a project with fixture, workflow, and deps', () => {
   const { cmdNew } = require('../lib/cli');
   const os = require('node:os');
