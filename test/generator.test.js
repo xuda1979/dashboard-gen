@@ -277,6 +277,32 @@ test('dg build resolves alternate default DSL candidates', () => {
   }
 });
 
+test('dg build with no arg in an empty dir fails with a usage-style error', () => {
+  // With neither an argv arg nor any default source name present, ensureArg
+  // must surface the "No DSL file given" hint and exit 1 — not crash on a
+  // nonexistent resolved path. Distinct from the explicit-missing-path branch
+  // (which reports "DSL file not found: <name>").
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-empty-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  let msg = '';
+  console.error = (s) => { msg += String(s); };
+  try {
+    cli(['build']);
+    assert.match(msg, /No DSL file given; look for dg\.dsl\.yaml \/ site\.yaml\./);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 when no source resolves');
+  } finally {
+    console.error = origErr;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('dg build with a missing DSL arg fails with an error', () => {
   // A missing DSL file raises a ParseError deep in ensureArg. The CLI entry
   // point must surface it as a clean "[dashboard-gen] DSL file not found: ..."
