@@ -1312,6 +1312,28 @@ test('grid card shorthand and quote cite object render their cell forms', () => 
   assert.match(html, /<footer class="dg-quote-cite">— Ops Handbook<\/footer>/, 'cite object form renders its text');
 });
 
+test('grid cells render any full component object via item.type', () => {
+  // README: a grid `items` entry may be a full component object; the cell
+  // delegates to that component's renderer. The dashboard example already
+  // slots stats into a grid, but this branch was unpinned in the unit suite.
+  const html = renderHtml({
+    title: 'grid-components',
+    sections: [{
+      content: [{
+        type: 'grid',
+        items: [
+          { type: 'stat', label: 'Rate', value: '42' },
+          { type: 'button', text: 'Go', style: 'primary' },
+          { type: 'badge', text: 'stable', tone: 'success' },
+        ],
+      }],
+    }],
+  });
+  assert.match(html, /<div class="dg-cell"><div class="dg-stat" role="img" aria-label="Rate">/, 'stat component renders inside the cell');
+  assert.match(html, /<div class="dg-cell"><button type="button" class="dg-btn dg-btn--primary">Go<\/button><\/div>/, 'button component renders inside the cell');
+  assert.match(html, /<div class="dg-cell"><span class="dg-badge dg-badge--success">stable<\/span><\/div>/, 'badge component renders inside the cell');
+});
+
 test('invalid chart data shape raises StyleError', () => {
   const doc = {
     title: 'x',
