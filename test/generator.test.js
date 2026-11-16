@@ -426,6 +426,43 @@ test('extended components (badge, divider, quote) render', () => {
   assert.match(html, /— Steve Jobs/);
 });
 
+test('button style, card intent, badge tone variants render their classes', () => {
+  // README component table: button `style`, card `intent`, badge `tone` each
+  // accept a set of named variants. Only the defaults were pinned; assert the
+  // full documented variant set maps to its class, and invalid values fall back
+  // to the default.
+  const doc = {
+    title: 'variants',
+    sections: [{
+      content: [
+        { type: 'button', text: 'B', style: 'secondary' },
+        { type: 'button', text: 'C', style: 'subtle' },
+        { type: 'button', text: 'D', style: 'danger' },
+        { type: 'button', text: 'E', style: 'bogus' },
+        { type: 'card', title: 'S', text: 'x', intent: 'success' },
+        { type: 'card', title: 'W', text: 'y', intent: 'warning' },
+        { type: 'card', title: 'R', text: 'z', intent: 'danger' },
+        { type: 'badge', text: 'n', tone: 'neutral' },
+        { type: 'badge', text: 'p', tone: 'primary' },
+        { type: 'badge', text: 'w', tone: 'warning' },
+        { type: 'badge', text: 'd', tone: 'danger' },
+      ],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /class="dg-btn dg-btn--secondary">B</);
+  assert.match(html, /class="dg-btn dg-btn--subtle">C</);
+  assert.match(html, /class="dg-btn dg-btn--danger">D</);
+  assert.match(html, /class="dg-btn dg-btn--primary">E</); // unknown -> default
+  assert.match(html, /class="dg-card dg-card--success"/);
+  assert.match(html, /class="dg-card dg-card--warning"/);
+  assert.match(html, /class="dg-card dg-card--danger"/);
+  assert.match(html, /class="dg-badge dg-badge--neutral">n</);
+  assert.match(html, /class="dg-badge dg-badge--primary">p</);
+  assert.match(html, /class="dg-badge dg-badge--warning">w</);
+  assert.match(html, /class="dg-badge dg-badge--danger">d</);
+});
+
 test('headline id and list ordered render their documented fields', () => {
   // README component table: headline takes `id` (anchor) and list takes
   // `ordered` (ordered vs bullet list). Both were untested.
