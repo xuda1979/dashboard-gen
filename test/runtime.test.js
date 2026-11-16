@@ -331,3 +331,33 @@ test('runtime shows a parse error when chart data is malformed', () => {
   assert.ok(out.includes('Chart data parse failed'), 'malformed data surfaces a parse error');
   assert.ok(out.includes('dg-error'), 'parse failure is marked with the dg-error class');
 });
+
+test('runtime renders multi-series bar chart into SVG bars', () => {
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: bar\n        title: Sales\n        data:\n          - { label: Q1, series: { a: 10, b: 5 } }\n          - { label: Q2, series: { a: 20, b: 8 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const data = {
+    'chart-0': [
+      { label: 'Q1', series: { a: 10, b: 5 } },
+      { label: 'Q2', series: { a: 20, b: 8 } },
+    ],
+  };
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'Sales' },
+  ]);
+  runRuntime(code, dom, data);
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('class="dg-svg"'), 'bar chart produces an svg');
+  assert.ok(out.includes(' bar chart"'), 'svg carries a "bar chart" accessible name');
+  const bars = (out.match(/<rect class="dg-bar" /g) || []).length;
+  assert.strictEqual(bars, 4, '2 labels x 2 series => 4 bars');
+  assert.ok(out.includes('>Q1 a: 10<'), 'bar title names the label, series and value');
+  assert.ok(out.includes('>Q2 b: 8<'), 'later bar carries its own title');
+  // height must scale with value: value 20 is taller (smaller y, larger height)
+  // than value 10 once parsed out of the rect geometry.
+  const heights = out.match(/height="([\d.]+)"/g).map((s) => Number(s.match(/[\d.]+/)[0]));
+  assert.ok(Math.max(...heights) > Math.min(...heights), 'bar heights differ by value');
+  assert.ok(out.includes('>a</span>') && out.includes('>b</span>'), 'legend lists both series');
+});
