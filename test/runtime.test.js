@@ -90,6 +90,45 @@ test('runtime renders inline line chart into SVG', () => {
   assert.ok(els[2].innerHTML.includes('%'), 'pie shows percentages');
 });
 
+test('runtime pins the line SVG chrome: grid, axes, legend names, viewBox', () => {
+  // Beyond the svg/legend/aria presence checks above, the rendering surface
+  // must actually include the axis chrome: horizontal grid lines, a y-axis of
+  // numeric ticks, x-axis category labels for every row, series paths with
+  // per-series strokes, a legend naming each series, and the svg root carrying
+  // class/viewBox/role/aria-label together.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'chart.yaml'), 'utf8');
+  const html = buildFromSource(src, 'chart.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+  const data = extractData(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'DAU this week' },
+  ]);
+  runRuntime(code, dom, data);
+  const out = figureEls[0].innerHTML;
+
+  assert.ok(/<svg class="dg-svg" viewBox="0 0 \d+ \d+"/.test(out), 'svg root has class and a viewBox');
+  assert.ok(out.includes('role="img"'), 'svg carries the img role');
+  assert.ok(out.includes('aria-label="DAU this week line chart"'), 'aria-label composes title and kind');
+
+  const grid = (out.match(/class="dg-grid-h"/g) || []).length;
+  assert.ok(grid >= 3, `horizontal grid lines rendered (got ${grid})`);
+
+  const yTicks = out.match(/<text class="dg-axis"(?! dg-axis-x)[^>]*>[-\d.]+<\/text>/g) || [];
+  assert.ok(yTicks.length >= 3, `y-axis numeric ticks rendered (got ${yTicks.length})`);
+  assert.ok(yTicks.every((t) => /[-\d.]+/.test(t)), 'y ticks are numeric values');
+
+  for (const day of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
+    assert.ok(out.includes(`>${day}</text>`), `x-axis label for ${day}`);
+  }
+
+  const paths = out.match(/<path class="dg-series"[^>]*stroke="#[0-9a-f]{6}"/g) || [];
+  assert.ok(paths.length >= 2, `one stroked path per series (got ${paths.length})`);
+
+  assert.ok(out.includes('>you</span>') && out.includes('>competitors</span>'),
+    'legend names every series');
+  assert.ok(out.includes('class="dg-legend-swatch" style="background:#'), 'legend swatches carry colors');
+});
+
 test('runtime renders multi-row pie data as slices', () => {
   // 2-column object rows ([{label,value}] shape) and array rows are both valid
   // pie inputs; the runtime must draw one slice per row, not only row 0.
