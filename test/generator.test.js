@@ -1288,6 +1288,62 @@ test('serve resolves nested paths inside the served dir and blocks traversal', a
   }
 });
 
+test('serve answers 404 for missing files and sets content types by extension', async () => {
+  // The static-file path past the traversal/encoding guards: an absent file
+  // must be a 404 with text/plain (a build hint), while served files carry a
+  // per-extension Content-Type (.html/.json/.csv) and unknown extensions fall
+  // back to application/octet-stream. None of these paths were pinned before.
+  const { cmdServe } = require('../lib/cli');
+  const http = require('node:http');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-mime-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<h1>root</h1>');
+  fs.writeFileSync(path.join(root, 'a.json'), '[]');
+  fs.writeFileSync(path.join(root, 'a.csv'), 'x,y');
+  fs.writeFileSync(path.join(root, 'a.xyz'), 'raw');
+
+  const origLog = console.log;
+  console.log = () => {};
+  const server = cmdServe({ _: [root], port: 0 });
+  while (!server.address()) {
+    await new Promise((r) => setTimeout(r, 5));
+  }
+  const port = server.address().port;
+  const get = (p) => new Promise((resolvePromise) => {
+    const req = http.request({ host: 'localhost', port, path: p, method: 'GET' }, (res) => {
+      let body = '';
+      res.on('data', (d) => (body += d));
+      res.on('end', () =>
+        resolvePromise({ status: res.statusCode, body, type: res.headers['content-type'] }));
+    });
+    req.on('error', rejectOnce);
+    req.end();
+    function rejectOnce(e) { console.log = origLog; reject(e); }
+  });
+  await new Promise((r) => setTimeout(r, 150));
+  try {
+    const html = await get('/');
+    const json = await get('/a.json');
+    const csv = await get('/a.csv');
+    const raw = await get('/a.xyz');
+    const miss = await get('/nope.html');
+    assert.strictEqual(html.status, 200);
+    assert.strictEqual(html.type, 'text/html; charset=utf-8');
+    assert.strictEqual(json.status, 200);
+    assert.strictEqual(json.type, 'application/json');
+    assert.strictEqual(csv.status, 200);
+    assert.strictEqual(csv.type, 'text/plain; charset=utf-8');
+    assert.strictEqual(raw.status, 200);
+    assert.strictEqual(raw.type, 'application/octet-stream', 'unknown extension falls back');
+    assert.strictEqual(miss.status, 404, 'missing file is 404');
+    assert.strictEqual(miss.type, 'text/plain');
+    assert.strictEqual(miss.body, 'not found');
+  } finally {
+    server.close();
+    console.log = origLog;
+  }
+});
+
 test('serve picks the port from PORT env, the --port flag, or 4173', () => {
   const { cmdServe } = require('../lib/cli');
   const http = require('node:http');
