@@ -186,6 +186,33 @@ test('runtime compacts large y-axis ticks with k/M shorthand', () => {
   assert.ok(texts.some((t) => /^-?\d+(\.\d+)?$/.test(t)), 'smaller ticks stay plain numbers');
 });
 
+test('runtime compacts million-scale y-axis ticks with the M suffix', () => {
+  // fmt() switches from k to M at 1e6; a million-scale series must render
+  // compact 1.8M/2.8M/3.9M style ticks instead of 8-digit numbers that would
+  // crowd the axis.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Revenue\n        data:\n          - { label: Q1, series: { rev: 2200000 } }\n          - { label: Q2, series: { rev: 3500000 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Revenue' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { rev: 2200000 } },
+      { label: 'Q2', series: { rev: 3500000 } },
+    ],
+  });
+  const out = figureEls[0].innerHTML;
+  const ticks = out.match(/<text class="dg-axis"(?! dg-axis-x)[^>]*>[^<]+<\/text>/g) || [];
+  assert.ok(ticks.length >= 3, `y-axis ticks rendered (got ${ticks.length})`);
+  const texts = ticks.map((t) => t.replace(/<[^>]+>/g, ''));
+  assert.ok(texts.every((t) => /M$/.test(t) || /k$/.test(t)), `all million-scale ticks are compacted: ${texts.join(', ')}`);
+  assert.ok(texts.some((t) => /M$/.test(t)), `at least one tick uses M shorthand: ${texts.join(', ')}`);
+  assert.ok(!texts.some((t) => /^\d{6,}$/.test(t)), 'no 6+ digit plain ticks survive');
+});
+
 test('runtime renders multi-row pie data as slices', () => {
   // 2-column object rows ([{label,value}] shape) and array rows are both valid
   // pie inputs; the runtime must draw one slice per row, not only row 0.
@@ -634,4 +661,49 @@ test('runtime applies custom swatches to line and bar series paths', () => {
   assert.ok(!lineOut.includes('stroke="#3b82f6"'), 'line uses no palette fallback stroke');
   assert.ok(!barOut.includes('fill="#3b82f6"'), 'bar uses no palette fallback fill');
   assert.ok(!pieOut.includes('fill="#3b82f6"') && !pieOut.includes('fill="#f59e0b"'), 'pie uses no palette fallback fill');
+});
+
+test('runtime derives series colors from a deterministic palette hash when no swatches are set', () => {
+  // Without data-chart-swatches the runtime picks each series stroke (and its
+  // legend swatch) from a fixed 8-color palette by hashing the series name, so
+  // the same name always gets the same color across charts and rebuilds while
+  // distinct names in one chart get distinct palette slots.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Trend\n        data:\n          - { label: Jan, series: { rev: 10, other: 4 } }\n          - { label: Feb, series: { rev: 14, other: 6 } }\n      - type: chart\n        kind: line\n        title: Trend Again\n        data:\n          - { label: Jan, series: { rev: 2 } }\n          - { label: Feb, series: { rev: 7 } }\n',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Trend' },
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-1', 'data-chart-title': 'Trend Again' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Jan', series: { rev: 10, other: 4 } },
+      { label: 'Feb', series: { rev: 14, other: 6 } },
+    ],
+    'chart-1': [
+      { label: 'Jan', series: { rev: 2 } },
+      { label: 'Feb', series: { rev: 7 } },
+    ],
+  });
+  const out0 = figureEls[0].innerHTML;
+  const out1 = figureEls[1].innerHTML;
+  // Stroke colors on the paths must come from the fixed palette.
+  const strokes0 = out0.match(/class="dg-series"[^>]*stroke="(#[0-9a-f]{6})"/g) || [];
+  const strokes1 = out1.match(/class="dg-series"[^>]*stroke="(#[0-9a-f]{6})"/g) || [];
+  assert.strictEqual(strokes0.length, 2, 'two series in chart one');
+  assert.strictEqual(strokes1.length, 1, 'one series in chart two');
+  const color0a = strokes0[0].match(/#[0-9a-f]{6}/)[0];
+  const color0b = strokes0[1].match(/#[0-9a-f]{6}/)[0];
+  assert.notStrictEqual(color0a, color0b, 'rev and other hash to different palette slots');
+  assert.match(color0a, /^#(3b82f6|a855f7|f59e0b|10b981|ef4444|8b5cf6|14b8a6|f97316)$/, 'uses the documented palette');
+  // Legend swatch of a series always matches its path stroke.
+  const legend0 = out0.match(/dg-legend-swatch" style="background:(#[0-9a-f]{6})"/g) || [];
+  assert.strictEqual(legend0.length, 2, 'two legend swatches in chart one');
+  assert.strictEqual(legend0[0].match(/#[0-9a-f]{6}/)[0], color0a, 'first legend swatch matches first stroke');
+  // rev appears in both charts; its color must be identical in both.
+  const revColor1 = strokes1[0].match(/#[0-9a-f]{6}/)[0];
+  assert.strictEqual(revColor1, color0a, 'same series name colors identically across charts');
+  assert.ok(out1.includes(`background:${revColor1}`), 'chart two legend swatch matches too');
 });
