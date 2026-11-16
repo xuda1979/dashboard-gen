@@ -436,6 +436,62 @@ test('page-level hero accepts the { content: [...] } container form', () => {
   assert.match(html, /Container-led hero/);
 });
 
+test('paragraph inline-link object form renders an anchored paragraph', () => {
+  // README: paragraph `text` may be given in the `{ text, href }` inline-link
+  // form (or `{ text, link: { href, newtab } }`). It must render a
+  // dg-paragraph containing a dg-link anchor to the resolved href.
+  const doc = {
+    title: 'links',
+    sections: [{
+      content: [
+        { type: 'paragraph', text: 'Read', href: 'https://example.com' },
+        { type: 'paragraph', text: 'Open', link: { href: 'https://ext.example.com', newtab: true } },
+      ],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<p class="dg-paragraph">Read <a href="https:\/\/example.com" class="dg-link">https:\/\/example.com<\/a><\/p>/);
+  assert.match(html, /Open <a href="https:\/\/ext.example.com" class="dg-link" target="_blank" rel="noopener">/);
+});
+
+test('button and link honour newtab with target/rel', () => {
+  // README: button and link expose a `newtab` key; when true the anchor must
+  // open in a new tab (target=_blank + rel=noopener), otherwise no target.
+  const doc = {
+    title: 'newtab',
+    sections: [{
+      content: [
+        { type: 'button', text: 'Open', href: 'https://btn.example.com', newtab: true },
+        { type: 'button', text: 'Stay', href: 'https://btn2.example.com' },
+        { type: 'link', text: 'Away', href: 'https://link.example.com', newtab: true },
+      ],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<a href="https:\/\/btn.example.com" class="dg-btn dg-btn--primary" target="_blank" rel="noopener">Open<\/a>/);
+  assert.match(html, /<a href="https:\/\/btn2.example.com" class="dg-btn dg-btn--primary">Stay<\/a>/);
+  assert.match(html, /<a href="https:\/\/link.example.com" class="dg-link" target="_blank" rel="noopener">Away<\/a>/);
+});
+
+test('chart and table captions surface as aria-labels and notes', () => {
+  // README: table takes a `caption` (rendered as the table aria-label) and
+  // chart takes a `caption` (rendered as the figure aria-label plus a visible
+  // dg-note line under the chart title).
+  const doc = {
+    title: 'captions',
+    sections: [{
+      content: [
+        { type: 'table', caption: 'Env table', rows: [['k', 'v'], ['a', 'b']] },
+        { type: 'chart', kind: 'line', title: 'CPU', caption: 'Rolling 1h', data: [['x', 1]] },
+      ],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<table class="dg-table" aria-label="Env table">/);
+  assert.match(html, /class="dg-figure dg-chart"[^>]*aria-label="Rolling 1h"/);
+  assert.match(html, /<p class="dg-note">Rolling 1h<\/p>/);
+});
+
 test('unknown component type raises readable error', () => {
   const doc = { title: 'x', sections: [{ content: [{ type: 'nope' }] }] };
   assert.throws(
