@@ -300,6 +300,31 @@ test('custom theme tokens override defaults as page CSS variables', () => {
   assert.ok(!/--accent:\s*$/.test(html), 'accent token is populated, not empty');
 });
 
+test('page theme dark overrides merge into the dark-mode CSS block', () => {
+  // README page schema shows `theme:` tokens; the dark variant is a nested
+  // `dark:` mapping of the same keys. It must merge over the built-in dark
+  // defaults and land inside the prefers-color-scheme block, not leak into the
+  // light :root tokens.
+  const doc = {
+    title: 't',
+    theme: { accent: '#0ea5e9', dark: { pageBg: '#0b1220', accent: '#38bdf8' } },
+    sections: [],
+  };
+  const html = renderHtml(doc);
+  // light :root keeps its defaults plus the explicit root override only
+  assert.match(html, /--page-bg: #f6f8fa;/, 'light pageBg default unchanged');
+  assert.match(html, /--accent: #0ea5e9;/, 'light accent override present');
+  // dark block holds defaults merged with the page dark overrides
+  assert.match(html, /@media \(prefers-color-scheme: dark\) \{/);
+  assert.match(html, /--card-bg: #1f2937;/, 'default dark token survives the merge');
+  assert.match(html, /--page-bg: #0b1220;/, 'dark pageBg override emitted');
+  assert.match(html, /--accent: #38bdf8;/, 'dark accent override emitted');
+  assert.ok(
+    /@media \(prefers-color-scheme: dark\) \{\s*:root \{[\s\S]*?--accent: #38bdf8;[\s\S]*?\}\s*\}/.test(html),
+    'dark overrides sit inside the media block'
+  );
+});
+
 test('every chart figure carries a role and accessible name', () => {
   const html = buildFixture('chart');
   const figures = html.match(/<div class="dg-figure dg-chart"[^>]*>/g) || [];
