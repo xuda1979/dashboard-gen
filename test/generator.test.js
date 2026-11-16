@@ -706,6 +706,19 @@ test('local data file binding is resolved into the store', () => {
   assert.match(html, /window\.__DG_DATA__ = \{"chart-0":\[\{"label":"a"/);
 });
 
+test('CSV data file binding is parsed into rows at build time', () => {
+  const tmp = path.join(ExampleTmp(), 'csv');
+  const fileDir = path.join(tmp, 'fixtures');
+  fs.mkdirSync(fileDir, { recursive: true });
+  fs.writeFileSync(path.join(fileDir, 'data.csv'), 'label,val\nQ1,4\nQ2,9\n');
+  const doc = {
+    title: 't',
+    sections: [{ content: [{ type: 'chart', kind: 'line', file: 'data.csv' }] }],
+  };
+  const html = renderHtml(doc, { fileDir });
+  assert.match(html, /window\.__DG_DATA__ = \{"chart-0":\[\["label","val"\],\["Q1","4"\],\["Q2","9"\]\]\}/);
+});
+
 function ExampleTmp() {
   const os = require('node:os');
   return fs.mkdtempSync(path.join(os.tmpdir(), 'dg-fixture-'));
