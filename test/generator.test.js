@@ -1248,6 +1248,42 @@ test('button icon adds an inline SVG and stat progressLabel overrides the aria l
   assert.match(html, /class="dg-stat-progress" aria-label="8%" role="img"/, 'progress defaults to N% when no label');
 });
 
+test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
+  // components.js renderStat: a delta string Number() can't parse and a
+  // non-numeric progress value are silently dropped, progress is clamped into
+  // 0-100, and unknown delta/progressTone values fall back to neutral/primary.
+  // All were implied by the README but unpinned.
+  const html = renderHtml({
+    title: 'stats',
+    sections: [{
+      content: [
+        { type: 'stat', label: 'A', value: '5', delta: 'abc' },
+        { type: 'stat', label: 'B', value: '6', progress: 'fifty' },
+        { type: 'stat', label: 'C', value: '7', progress: 110, progressTone: 'glow' },
+        { type: 'stat', label: 'D', value: '8', progress: -20 },
+        { type: 'stat', label: 'E', value: '9', delta: { value: 3, tone: 'glow' } },
+      ],
+    }],
+  });
+  // Scope to <main> so the embedded style block's class markers can't pollute
+  // the counts.
+  const body = html.slice(html.indexOf('<main'));
+  assert.strictEqual(
+    (body.match(/class="dg-stat-delta/g) || []).length,
+    1,
+    'only the finite delta renders (abc and the object delta both settle on one)'
+  );
+  assert.match(body, /class="dg-stat-delta"[^>]*>▲ 3</, 'object delta with unknown tone renders neutral');
+  assert.strictEqual(
+    (body.match(/class="dg-stat-progress"/g) || []).length,
+    2,
+    'only finite progress values render (fifty is dropped)'
+  );
+  assert.match(body, /dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:100%"/, 'progress clamps above 100');
+  assert.match(body, /dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:0%"/, 'progress clamps below 0');
+  assert.ok(!/dg-stat-progress-fill--glow/.test(body), 'unknown progressTone falls back to primary');
+});
+
 test('grid card shorthand and quote cite object render their cell forms', () => {
   // README: a grid `items` entry may be `{ card: {...} }` (full card inside a
   // cell) and a quote `cite` may be `{ text }`. Both were unpinned.
