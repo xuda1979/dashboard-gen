@@ -341,6 +341,26 @@ test('grid layout renders sections as auto-fit columns', () => {
   assert.strictEqual(items.length, 3);
 });
 
+test('grid component honors columns as a fixed layout and defaults to auto-fill', () => {
+  const doc = {
+    title: 'grid-comp',
+    layout: 'section',
+    sections: [
+      {
+        title: 'Fixed',
+        content: [
+          { type: 'grid', columns: 4, items: [{ title: 'a', text: '1' }, { title: 'b', text: '2' }] },
+          { type: 'grid', columnWidth: '180px', items: [{ title: 'c', text: '3' }] },
+        ],
+      },
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /class="dg-grid" style="grid-template-columns: repeat\(4, minmax\(0, 1fr\)\);" data-grid-cols="4"/);
+  assert.match(html, /style="grid-template-columns: repeat\(auto-fill, minmax\(180px, 1fr\)\);" data-grid-cols="3"/);
+  assert.strictEqual((html.match(/class="dg-cell"/g) || []).length, 3);
+});
+
 test('hero layout renders sections as hero columns', () => {
   const doc = {
     title: 'hero-layout',
