@@ -540,6 +540,26 @@ test('headline id and list ordered render their documented fields', () => {
   assert.match(html, /<ul class="dg-ul"><li>x<\/li><li>y<\/li><\/ul>/);
 });
 
+test('fallbacks: card title object, headline level, badge tone', () => {
+  // card `title` may be { text }; headline `level` outside 1-6 falls back to
+  // h2; badge `tone` unknown falls back to neutral.
+  const html = renderHtml({
+    title: 'fallbacks',
+    sections: [{
+      content: [
+        { type: 'card', title: { text: 'Obj Title' }, text: 'body' },
+        { type: 'headline', text: 'H', level: 9 },
+        { type: 'headline', text: 'H0' },
+        { type: 'badge', text: 'b', tone: 'bogus' },
+      ],
+    }],
+  });
+  assert.match(html, /<h3 class="dg-card-title">Obj Title<\/h3>/, 'card title object form renders its text');
+  const heads = html.match(/class="dg-headline dg-h(\d)"/g) || [];
+  assert.ok(heads.every((h) => /dg-h2"/.test(h)), 'invalid and missing levels fall back to h2');
+  assert.match(html, /<span class="dg-badge dg-badge--neutral">b<\/span>/, 'unknown badge tone -> neutral');
+});
+
 test('sidebar layout renders aside sidebar from first section nav widget', () => {
   const doc = {
     title: 'side',
