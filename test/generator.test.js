@@ -1210,11 +1210,20 @@ test('stat delta renders neutral for numeric without tone and honors bad tone', 
       content: [
         { type: 'stat', label: 'A', value: '1', delta: -8 },
         { type: 'stat', label: 'B', value: '2', delta: { value: -0.5, tone: 'bad' } },
+        { type: 'stat', label: 'C', value: '3', delta: 0 },
+        { type: 'stat', label: 'D', value: '4', delta: '8' },
       ],
     }],
   });
   assert.match(html, /class="dg-stat-delta"[^>]*>▼ 8</); // neutral, arrow carries the sign
   assert.match(html, /class="dg-stat-delta dg-stat-delta--bad"[^>]*>▼ 0.5</);
+  // A zero delta renders the bare "0" with no direction arrow; a numeric-string
+  // delta is coerced through Number and rendered on the same scale (▲ 8).
+  assert.match(html, /class="dg-stat-delta"[^>]*>0</);
+  assert.match(html, /class="dg-stat-delta"[^>]*>▲ 8</);
+  let zeroDelta = html.match(/class="dg-stat-delta"[^>]*>0</);
+  assert.ok(zeroDelta, 'zero delta rendered without a glyph');
+  assert.ok(!/>▲ 0<|>▼ 0</.test(html), 'no arrow glyphs preface the zero delta');
 });
 
 test('button icon adds an inline SVG and stat progressLabel overrides the aria label', () => {
