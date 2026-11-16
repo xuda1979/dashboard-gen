@@ -498,6 +498,14 @@ test('runtime renders multi-series bar chart into SVG bars', () => {
   const heights = out.match(/height="([\d.]+)"/g).map((s) => Number(s.match(/[\d.]+/)[0]));
   assert.ok(Math.max(...heights) > Math.min(...heights), 'bar heights differ by value');
   assert.ok(out.includes('>a</span>') && out.includes('>b</span>'), 'legend lists both series');
+
+  // Bar chrome: grid lines, numeric y ticks, an x-axis category label per
+  // row, and the svg root's viewBox — the same surface pinned for line charts.
+  assert.ok(/<svg class="dg-svg" viewBox="0 0 \d+ \d+"/.test(out), 'bar svg root has class and a viewBox');
+  assert.ok((out.match(/class="dg-grid-h"/g) || []).length >= 3, 'horizontal grid lines rendered');
+  const yTicks = out.match(/<text class="dg-axis"(?! dg-axis-x)[^>]*>[-\d.]+<\/text>/g) || [];
+  assert.ok(yTicks.length >= 3, `y-axis numeric ticks rendered (got ${yTicks.length})`);
+  assert.ok(out.includes('>Q1</text>') && out.includes('>Q2</text>'), 'x-axis labels every category');
 });
 
 test('runtime draws one pie slice per series key in a single data row', () => {
