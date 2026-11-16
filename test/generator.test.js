@@ -170,6 +170,32 @@ test('custom dataId on a chart is honored end-to-end', () => {
   assert.deepEqual(Object.keys(store), ['rev']);
 });
 
+test('chart data ids stay aligned when section keys are declared out of render order', () => {
+  // The render pass emits widgets in nav -> hero -> content order; the data
+  // store must be keyed in the same order even if the DSL author wrote the
+  // section keys differently, otherwise a figure points at the wrong rows.
+  const doc = {
+    title: 'order',
+    hero: [{ type: 'chart', kind: 'line', title: 'H', data: [['h', 1]] }],
+    sections: [{
+      content: [{ type: 'chart', kind: 'bar', title: 'A', data: [['a', 5]] }],
+      hero: [{ type: 'chart', kind: 'pie', title: 'B', data: [{ label: 'x', value: 3 }] }],
+    }],
+  };
+  const html = renderHtml(doc);
+  const store = JSON.parse(html.match(/window\.__DG_DATA__ = (\{[\s\S]*?\});/)[1]);
+  const figureIds = [...html.matchAll(/data-chart-title="([^"]+)"[^>]*data-chart-data="([^"]+)"/g)]
+    .map((m) => ({ title: m[1], id: m[2] }));
+
+  assert.strictEqual(figureIds.length, 3, 'all three charts emitted');
+  // titles map to their own rows: H -> [[h,1]], B -> [x:3], A -> [[a,5]]
+  const storeById = Object.fromEntries(Object.entries(store).map(([id, rows]) => [id, JSON.stringify(rows)]));
+  const byTitle = (t) => storeById[figureIds.find((f) => f.title === t).id];
+  assert.strictEqual(byTitle('H'), JSON.stringify([['h', 1]]));
+  assert.strictEqual(byTitle('A'), JSON.stringify([['a', 5]]));
+  assert.ok(storeById[figureIds.find((f) => f.title === 'B').id].includes('"x"'));
+});
+
 test('page description is emitted as a meta tag', () => {
   const doc = { title: 't', description: 'A lovely page.', sections: [] };
   const html = renderHtml(doc);
@@ -257,6 +283,29 @@ test('sidebar layout renders aside sidebar from first section nav widget', () =>
   assert.match(html, /class="dg-sidebar-wrap"/);
   assert.match(html, /Jump to/); // nav widget lives in the sticky aside
   assert.match(html, /second section/);
+});
+
+test('sidebar layout keeps chart ids aligned when content precedes nav in the DSL', () => {
+  const doc = {
+    title: 'side-charts',
+    layout: 'sidebar',
+    sections: [
+      {
+        // declared content first, nav second — the store must still key in
+        // nav -> content order so both figures resolve their own rows
+        content: [{ type: 'chart', kind: 'line', title: 'Main', data: [['m', 7]] }],
+        nav: [{ type: 'chart', kind: 'pie', title: 'Mini', data: [{ label: 'z', value: 4 }] }],
+      },
+    ],
+  };
+  const html = renderHtml(doc);
+  const store = JSON.parse(html.match(/window\.__DG_DATA__ = (\{[\s\S]*?\});/)[1]);
+  const ids = [...html.matchAll(/data-chart-title="([^"]+)"[^>]*data-chart-data="([^"]+)"/g)]
+    .map((m) => ({ title: m[1], id: m[2] }));
+  assert.strictEqual(ids.length, 2);
+  const byTitle = (t) => JSON.stringify(store[ids.find((f) => f.title === t).id]);
+  assert.strictEqual(byTitle('Main'), JSON.stringify([['m', 7]]));
+  assert.ok(byTitle('Mini').includes('"label":"z"'));
 });
 
 test('grid layout renders sections as auto-fit columns', () => {
