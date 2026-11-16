@@ -124,6 +124,25 @@ test('runtime renders pie from [label, value] array rows', () => {
   assert.ok(out.includes('Organic 45.0%') && out.includes('Paid 30.0%') && out.includes('Referral 25.0%'), 'slice labels show computed shares');
 });
 
+test('runtime applies custom swatches to slice and legend colors', () => {
+  // A swatches map on the chart component is serialized into data-chart-swatches;
+  // the runtime must parse it and use the named colors for both the slice fill
+  // and the legend swatch, instead of the palette hash fallback.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: pie\n        title: Share\n        swatches: { Organic: "#16a34a", Paid: "#2563eb" }\n        data:\n          - { label: Organic, value: 60 }\n          - { label: Paid, value: 40 }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'Share', 'data-chart-swatches': '{"Organic":"#16a34a","Paid":"#2563eb"}' },
+  ]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'Organic', value: 60 }, { label: 'Paid', value: 40 }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('fill="#16a34a"'), 'slice uses the custom swatch color');
+  assert.ok(out.includes('background:#2563eb'), 'legend swatch shows the custom color');
+  assert.ok(!out.includes('fill="#3b82f6"') && !out.includes('fill="#f59e0b"'), 'palette fallback not used');
+});
+
 test('runtime shows no-data note when chart has empty data', () => {
   const html = buildFromSource(
     'title: t\nsections:\n  - content:\n      - type: chart\n        kind: pie',
