@@ -422,6 +422,20 @@ test('section hero renders as a sub-hero strip above content', () => {
   assert.match(html, /Body copy/);
 });
 
+test('page-level hero accepts the { content: [...] } container form', () => {
+  // README: hero is "a component list or { content: [...] }". The container
+  // form must render identically to the plain list form (dg-hero header).
+  const doc = {
+    title: 'container-hero',
+    hero: { content: [{ type: 'headline', level: 1, text: 'Container-led hero' }] },
+    sections: [],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<header class="dg-hero">/);
+  assert.match(html, /class="dg-hero-inner"/);
+  assert.match(html, /Container-led hero/);
+});
+
 test('unknown component type raises readable error', () => {
   const doc = { title: 'x', sections: [{ content: [{ type: 'nope' }] }] };
   assert.throws(
