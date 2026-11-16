@@ -1438,3 +1438,92 @@ test('build resolves self:// fixtures as local relative paths', () => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Component coverage: paragraph, grid, quote, divider
+// ---------------------------------------------------------------------------
+
+test('paragraph component renders plain text and inline-link forms', () => {
+  const html = renderHtml({
+    title: 't',
+    sections: [
+      {
+        content: [
+          { type: 'paragraph', text: 'Plain body copy.' },
+          { type: 'paragraph', text: 'Read more at', href: 'https://docs.example.com', newtab: true },
+          { type: 'paragraph', text: 'About', link: { href: '/about', newtab: false } },
+          { type: 'paragraph' },
+        ],
+      },
+    ],
+  });
+  assert.match(html, /<p class="dg-paragraph">Plain body copy\.<\/p>/);
+  assert.match(html, /<p class="dg-paragraph">Read more at <a href="https:\/\/docs\.example\.com" class="dg-link" target="_blank" rel="noopener">/);
+  assert.match(html, /<p class="dg-paragraph">About <a href="\/about" class="dg-link">\/about<\/a><\/p>/);
+  assert.match(html, /<p class="dg-paragraph"><\/p>/);
+});
+
+test('grid component honors columns and columnWidth inline styles', () => {
+  const html = renderHtml({
+    title: 't',
+    hero: [
+      {
+        type: 'grid',
+        columns: 2,
+        items: [
+          { title: 'A', text: 'bee', intent: 'success' },
+          { type: 'card', title: 'C', text: 'dee', intent: 'primary' },
+          { title: 'E', text: 'eff' },
+          'just text',
+        ],
+      },
+    ],
+  });
+  assert.match(html, /class="dg-grid" style="grid-template-columns: repeat\(2, minmax\(0, 1fr\)\);" data-grid-cols="2"/);
+  assert.match(html, /<div class="dg-cell"><div class="dg-card dg-card--success"><h3 class="dg-card-title">A<\/h3>bee<\/div><\/div>/);
+  assert.match(html, /<div class="dg-cell"><div class="dg-card dg-card--primary"><h3 class="dg-card-title">C<\/h3>dee<\/div><\/div>/);
+  assert.match(html, /<div class="dg-cell"><div class="dg-card"><h3 class="dg-card-title">E<\/h3>eff<\/div><\/div>/);
+  assert.match(html, /<div class="dg-cell">just text<\/div>/);
+});
+
+test('grid component defaults to auto-fill with a columnWidth minimum', () => {
+  const html = renderHtml({
+    title: 't',
+    sections: [
+      {
+        content: [
+          {
+            type: 'grid',
+            columnWidth: 180,
+            items: [{ title: 'X', text: 'y', intent: 'danger' }],
+          },
+        ],
+      },
+    ],
+  });
+  assert.match(html, /style="grid-template-columns: repeat\(auto-fill, minmax\(180px, 1fr\)\);" data-grid-cols="3"/);
+});
+
+test('quote component renders text with optional cite footer', () => {
+  const html = renderHtml({
+    title: 't',
+    sections: [
+      {
+        content: [
+          { type: 'quote', text: 'Ship early, ship often.' },
+          { type: 'quote', text: 'Measure twice.', cite: 'Operations Handbook' },
+        ],
+      },
+    ],
+  });
+  assert.match(html, /<blockquote class="dg-quote"><p>Ship early, ship often\.<\/p><\/blockquote>/);
+  assert.match(html, /<blockquote class="dg-quote"><p>Measure twice\.<\/p><footer class="dg-quote-cite">— Operations Handbook<\/footer><\/blockquote>/);
+});
+
+test('divider component emits a horizontal rule', () => {
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [{ type: 'divider' }] }],
+  });
+  assert.match(html, /<hr class="dg-divider">/);
+});
+
