@@ -463,6 +463,39 @@ test('button style, card intent, badge tone variants render their classes', () =
   assert.match(html, /class="dg-badge dg-badge--danger">d</);
 });
 
+test('user content is HTML-escaped in text and attributes', () => {
+  // All component text goes through esc()/attr(); a <script> payload must never
+  // survive into markup as a raw tag, and `"` in an attribute value must not be
+  // able to break out and inject attributes.
+  const evil = '<script>alert(1)</script>';
+  const doc = {
+    title: 'esc',
+    sections: [{
+      content: [
+        { type: 'headline', text: evil },
+        { type: 'paragraph', text: evil },
+        { type: 'list', items: [evil, 'ok'] },
+        { type: 'button', text: evil },
+        { type: 'button', text: 'bt', href: 'x" onmouseover="bad' },
+        { type: 'link', text: evil, href: 'a" onclick="bad' },
+        { type: 'card', title: evil, text: evil },
+        { type: 'badge', text: evil },
+        { type: 'quote', text: evil, cite: evil },
+        { type: 'stat', label: evil, value: evil, prefix: evil, suffix: evil, caption: evil },
+        { type: 'table', rows: [[evil]] },
+        { type: 'grid', items: [evil] },
+      ],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.ok(!html.includes('<script>alert(1)'), 'no raw payload script tag survives');
+  assert.ok(!html.includes('x" onmouseover="bad'), 'button href injection stays escaped');
+  assert.ok(!html.includes('a" onclick="bad'), 'link href injection stays escaped');
+  assert.match(html, /&lt;script&gt;/, 'text content is escaped');
+  assert.match(html, /href="a&quot; onclick=&quot;bad"/, 'attribute injection is escaped');
+  assert.match(html, /x&quot; onmouseover=&quot;bad/, 'button href injection is escaped');
+});
+
 test('headline id and list ordered render their documented fields', () => {
   // README component table: headline takes `id` (anchor) and list takes
   // `ordered` (ordered vs bullet list). Both were untested.
