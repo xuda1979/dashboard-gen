@@ -855,6 +855,28 @@ test('stat delta renders neutral for numeric without tone and honors bad tone', 
   assert.match(html, /class="dg-stat-delta dg-stat-delta--bad"[^>]*>▼ 0.5</);
 });
 
+test('button icon adds an inline SVG and stat progressLabel overrides the aria label', () => {
+  // README: buttons take `icon: true` (leading arrow glyph) and the stat
+  // progress bar defaults its accessible label to "N%" unless `progressLabel`
+  // is given. Both were documented but unpinned.
+  const html = renderHtml({
+    title: 'details',
+    sections: [{
+      content: [
+        { type: 'button', text: 'Go', style: 'primary', icon: true },
+        { type: 'button', text: 'Plain', style: 'primary' },
+        { type: 'stat', label: 'Rate', value: '42', progress: 63, progressLabel: '63 percent complete' },
+        { type: 'stat', label: 'Fill', value: '1', progress: 8 },
+      ],
+    }],
+  });
+  const withIcon = /<button type="button" class="dg-btn dg-btn--primary">Go<svg class="dg-icon" viewBox="0 0 24 24"/.test(html);
+  assert.ok(withIcon, 'icon button embeds the arrow svg');
+  assert.match(html, /<button type="button" class="dg-btn dg-btn--primary">Plain<\/button>/, 'no icon without the flag');
+  assert.match(html, /class="dg-stat-progress" aria-label="63 percent complete" role="img"/, 'progressLabel drives the aria label');
+  assert.match(html, /class="dg-stat-progress" aria-label="8%" role="img"/, 'progress defaults to N% when no label');
+});
+
 test('invalid chart data shape raises StyleError', () => {
   const doc = {
     title: 'x',
