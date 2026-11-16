@@ -90,6 +90,23 @@ test('runtime renders inline line chart into SVG', () => {
   assert.ok(els[2].innerHTML.includes('%'), 'pie shows percentages');
 });
 
+test('runtime renders multi-row pie data as slices', () => {
+  // 2-column object rows ([{label,value}] shape) and array rows are both valid
+  // pie inputs; the runtime must draw one slice per row, not only row 0.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: pie\n        title: Occupancy\n        data:\n          - { label: core, value: 12 }\n          - { label: edge, value: 8 }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'Occupancy' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'core', value: 12 }, { label: 'edge', value: 8 }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('class="dg-slice"'), 'pie renders slices');
+  assert.strictEqual((out.match(/class="dg-slice"/g) || []).length, 2, 'one slice per row');
+  assert.ok(out.includes('core 60.0%') && out.includes('edge 40.0%'), 'slice labels show computed shares');
+  assert.ok(out.includes('<svg'), 'pie produced svg');
+});
+
 test('runtime shows no-data note when chart has empty data', () => {
   const html = buildFromSource(
     'title: t\nsections:\n  - content:\n      - type: chart\n        kind: pie',

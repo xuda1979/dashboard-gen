@@ -138,8 +138,157 @@ test('watch mode rebuilds when DSL changes', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// Accessibility + no-external-resource (AC2/AC5 invariants on every example)
+// ---------------------------------------------------------------------------
+
+test('css tokens are emitted in kebab-case so pages are actually styled', () => {
+  const html = buildFixture('landing');
+  assert.match(html, /--page-bg: #f6f8fa;/);
+  assert.match(html, /--text-color: #3a3f46;/);
+  assert.match(html, /--font-family: system-ui/);
+  assert.ok(!html.includes('--pageBg:'), 'no camelCase token leftovers');
+});
+
+test('every chart figure carries a role and accessible name', () => {
+  const html = buildFixture('chart');
+  const figures = html.match(/<div class="dg-figure dg-chart"[^>]*>/g) || [];
+  assert.ok(figures.length >= 3, 'at least three chart figures');
+  for (const tag of figures) {
+    assert.match(tag, /\brole="img"/);
+    assert.match(tag, /\baria-label="[^"]+"/, 'figure has accessible name');
+  }
+});
+
+test('custom dataId on a chart is honored end-to-end', () => {
+  const doc = {
+    title: 't',
+    sections: [{ content: [{ type: 'chart', kind: 'bar', dataId: 'rev', data: [['Q1', 4], ['Q2', 9]] }] }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /data-chart-data="rev"/);
+  const store = JSON.parse(html.match(/window\.__DG_DATA__ = (\{[\s\S]*?\});/)[1]);
+  assert.deepEqual(Object.keys(store), ['rev']);
+});
+
+test('page description is emitted as a meta tag', () => {
+  const doc = { title: 't', description: 'A lovely page.', sections: [] };
+  const html = renderHtml(doc);
+  assert.match(html, /<meta name="description" content="A lovely page.">/);
+});
+
+test('numeric grid columnWidth is treated as pixels', () => {
+  const doc = {
+    title: 't',
+    sections: [{ content: [{ type: 'grid', columnWidth: 240, items: [] }] }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /minmax\(240px, 1fr\)/);
+});
+
+test('chart swatches stay inside an attribute (no raw JSON in markup)', () => {
+  const doc = {
+    title: 't',
+    sections: [{
+      content: [{
+        type: 'chart', kind: 'pie',
+        data: [{ label: 's', series: { Organic: 10 } }],
+        swatches: { Organic: '#16a34a' },
+      }],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /data-chart-swatches="\{&quot;Organic&quot;:&quot;#16a34a&quot;\}"/);
+  assert.ok(!html.includes('data-chart-swatches={"Organic":"#16a34a"}'), 'swatches escaped');
+});
+
+test('chart source attribute equals the fetch url (used by the runtime)', () => {
+  const doc = {
+    title: 't',
+    sections: [{ content: [{ type: 'chart', kind: 'line', data: { fetch: 'market.json' } }] }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /data-chart-source="market\.json"/);
+});
+
+// ---------------------------------------------------------------------------
 // DSL validation + readable errors
 // ---------------------------------------------------------------------------
+
+test('extended components (badge, divider, quote) render', () => {
+  const doc = {
+    title: 'ext',
+    sections: [{
+      content: [
+        { type: 'badge', text: 'Beta', tone: 'success' },
+        { type: 'divider' },
+        { type: 'quote', text: 'The only way to do great work is to love what you do.', cite: 'Steve Jobs' },
+      ],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<span class="dg-badge dg-badge--success">Beta<\/span>/);
+  assert.match(html, /<hr class="dg-divider">/);
+  assert.match(html, /<blockquote class="dg-quote">/);
+  assert.match(html, /— Steve Jobs/);
+});
+
+test('sidebar layout renders aside sidebar from first section nav widget', () => {
+  const doc = {
+    title: 'side',
+    layout: 'sidebar',
+    sections: [
+      {
+        nav: [
+          { type: 'headline', level: 3, text: 'Jump to' },
+          { type: 'link', text: 'Docs', href: '#s-docs' },
+        ],
+        content: [
+          { type: 'paragraph', text: 'main content' },
+        ],
+      },
+      {
+        title: 'Docs',
+        content: [{ type: 'paragraph', text: 'second section' }],
+      },
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<aside class="dg-sidebar" aria-label="Sidebar">/);
+  assert.match(html, /class="dg-sidebar-wrap"/);
+  assert.match(html, /Jump to/); // nav widget lives in the sticky aside
+  assert.match(html, /second section/);
+});
+
+test('grid layout renders sections as auto-fit columns', () => {
+  const doc = {
+    title: 'grid',
+    layout: 'grid',
+    sections: [
+      { content: [{ type: 'card', title: 'A', text: 'one' }] },
+      { content: [{ type: 'card', title: 'B', text: 'two' }] },
+      { content: [{ type: 'card', title: 'C', text: 'three' }] },
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /class="dg-layout-grid"/);
+  const items = html.match(/class="dg-layout-grid-item"/g) || [];
+  assert.strictEqual(items.length, 3);
+});
+
+test('hero layout renders sections as hero columns', () => {
+  const doc = {
+    title: 'hero-layout',
+    layout: 'hero',
+    sections: [
+      { hero: [{ type: 'headline', level: 1, text: 'Lead' }] },
+      { hero: [{ type: 'paragraph', text: 'Supporting text' }] },
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /class="dg-hero-layout"/);
+  assert.match(html, /class="dg-hero-col dg-hero-col--lead"/);
+  assert.match(html, /Supporting text/);
+});
 
 test('unknown component type raises readable error', () => {
   const doc = { title: 'x', sections: [{ content: [{ type: 'nope' }] }] };
@@ -228,3 +377,121 @@ test('fetch example keeps runtime fetch specs but no inline data', () => {
   assert.ok(!/window\.__DG_DATA__ = \{[^}]*'label'/.test(html), 'no inline rows embedded');
   assert.match(html, /data-chart-data="chart-0"/);
 });
+
+// ---------------------------------------------------------------------------
+// CLI behaviors: serve path resolution, dg new scaffolds, fixture copying
+// ---------------------------------------------------------------------------
+
+test('serve resolves nested paths inside the served dir and blocks traversal', async () => {
+  const { cmdServe } = require('../lib/cli');
+  const http = require('node:http');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-serve-'));
+  fs.mkdirSync(path.join(root, 'sub'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'index.html'), '<h1>root</h1>');
+  fs.writeFileSync(path.join(root, 'sub', 'a.html'), '<h1>nested</h1>');
+  fs.writeFileSync(path.join(root, 'secret.txt'), 'top secret');
+
+  const port = 43100 + (Math.floor(Math.random() * 200) % 200);
+  const origLog = console.log;
+  console.log = () => {};
+  const server = cmdServe({ _: [root], port });
+  const base = `http://localhost:${port}`;
+  const get = (p) => new Promise((resolvePromise) => {
+    // http.get(URL) normalizes ".." away before sending; use a raw request
+    // path so the server's traversal guard is the thing under test.
+    const req = http.request({ host: 'localhost', port, path: p, method: 'GET' }, (res) => {
+      let body = '';
+      res.on('data', (d) => (body += d));
+      res.on('end', () => resolvePromise({ status: res.statusCode, body }));
+    });
+    req.on('error', rejectOnce);
+    req.end();
+    function rejectOnce(e) { console.log = origLog; reject(e); }
+  });
+  await new Promise((r) => setTimeout(r, 150));
+  try {
+    const ok = await get('/');
+    const nested = await get('/sub/a.html');
+    const escape = await get('/../secret.txt');
+    const encoded = await get('/%E0%A4%A');
+    assert.strictEqual(ok.status, 200);
+    assert.strictEqual(ok.body, '<h1>root</h1>');
+    assert.strictEqual(nested.status, 200);
+    assert.strictEqual(nested.body, '<h1>nested</h1>');
+    assert.strictEqual(escape.status, 403, 'path traversal blocked');
+    assert.strictEqual(encoded.status, 400, 'malformed encoding rejected');
+  } finally {
+    server.close();
+    console.log = origLog;
+  }
+});
+
+test('dg new -t fetch scaffolds a project with fixture, workflow, and deps', () => {
+  const { cmdNew } = require('../lib/cli');
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    cmdNew({ _: ['demo'], t: 'fetch' });
+    assert.ok(fs.existsSync(path.join(cwd, 'demo', 'dg.dsl.yaml')));
+    assert.ok(fs.existsSync(path.join(cwd, 'demo', 'market.json')), 'fetch fixture copied');
+    assert.ok(fs.existsSync(path.join(cwd, 'demo', '.github', 'workflows', 'pages.yml')));
+    const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'demo', 'package.json'), 'utf8'));
+    assert.match(pkg.scripts.build, /dg build dg\.dsl\.yaml/);
+    assert.match(pkg.scripts.build, /dist\/site\.html/);
+    assert.ok(pkg.dependencies && pkg.dependencies['dashboard-gen'], 'scaffold depends on dashboard-gen');
+    const action = fs.readFileSync(path.join(cwd, 'demo', '.github', 'workflows', 'pages.yml'), 'utf8');
+    assert.match(action, /npm install/);
+    assert.match(action, /npm run build/);
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
+test('dg new --template=<t> is accepted', () => {
+  const { cmdNew } = require('../lib/cli');
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new2-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    cmdNew({ _: ['demo2'], template: 'table' });
+    assert.ok(fs.existsSync(path.join(cwd, 'demo2', 'dg.dsl.yaml')));
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
+test('build copies nested local fetch fixtures next to the output', () => {
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-copy-'));
+  fs.mkdirSync(path.join(tmp, 'data'), { recursive: true });
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), [
+    'title: t',
+    'sections:',
+    '  - content:',
+    '      - type: chart',
+    '        kind: line',
+    '        data: { fetch: "data/market.json" }',
+    '',
+  ].join('\n'));
+  fs.writeFileSync(path.join(tmp, 'data', 'market.json'), '[]');
+
+  const { cmdBuild } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    cmdBuild({ _: ['dg.dsl.yaml'] });
+    assert.ok(fs.existsSync(path.join(tmp, 'dist', 'site.html')), 'page built');
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'data', 'market.json')),
+      'nested fixture mirrored into dist/data'
+    );
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
