@@ -129,6 +129,63 @@ test('runtime pins the line SVG chrome: grid, axes, legend names, viewBox', () =
   assert.ok(out.includes('class="dg-legend-swatch" style="background:#'), 'legend swatches carry colors');
 });
 
+test('runtime escapes hostile chart labels instead of injecting markup', () => {
+  // Hostile labels and series names land in x-axis labels, legend entries and
+  // bar tooltips; the runtime must HTML-escape them so no element can break
+  // out of a generated page that mixes user data and charts.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: bar\n        title: Sales\n        data:\n          - { label: Q1, series: { a: 10 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'Sales' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: '<b>Q1</b>', series: { 'a&b': 10 } },
+      { label: 'Q2</text><script>alert(1)</script>', series: { 'a&b': 4 } },
+    ],
+  });
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('&lt;b&gt;Q1&lt;/b&gt;'), 'x-axis label escapes tags');
+  assert.ok(out.includes('Q2&lt;/text&gt;&lt;script&gt;alert(1)&lt;/script&gt;'),
+    'script-close payload stays text, never closes the text element');
+  assert.ok(out.includes('a&amp;b'), 'legend escapes the ampersand in a series name');
+  assert.ok(out.includes('<title>&lt;b&gt;Q1&lt;/b&gt; a&amp;b: 10</title>'),
+    'bar tooltip escapes label and series name together');
+  // The svg legitimately emits </text> and </title> close tags, so the negative
+  // control only scans for raw hostile markers, never generic element closers.
+  assert.ok(!out.includes('<b>') && !out.includes('<script') && !out.includes('</script>'),
+    'no raw markup survives');
+});
+
+test('runtime compacts large y-axis ticks with k/M shorthand', () => {
+  // fmt() renders ticks >= 1e3 with a k suffix and >= 1e6 with M; the line
+  // chart's y-axis must surface those compacted labels so a 2.5k-value series
+  // does not crowd the axis with long numbers.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Revenue\n        data:\n          - { label: Q1, series: { rev: 1500 } }\n          - { label: Q2, series: { rev: 2500 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Revenue' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { rev: 1500 } },
+      { label: 'Q2', series: { rev: 2500 } },
+    ],
+  });
+  const out = figureEls[0].innerHTML;
+  const ticks = out.match(/<text class="dg-axis"(?! dg-axis-x)[^>]*>[^<]+<\/text>/g) || [];
+  assert.ok(ticks.length >= 3, `y-axis ticks rendered (got ${ticks.length})`);
+  const texts = ticks.map((t) => t.replace(/<[^>]+>/g, ''));
+  assert.ok(texts.some((t) => /k$/.test(t)), `ticks use k shorthand for thousands: ${texts.join(', ')}`);
+  assert.ok(texts.some((t) => /^-?\d+(\.\d+)?$/.test(t)), 'smaller ticks stay plain numbers');
+});
+
 test('runtime renders multi-row pie data as slices', () => {
   // 2-column object rows ([{label,value}] shape) and array rows are both valid
   // pie inputs; the runtime must draw one slice per row, not only row 0.
