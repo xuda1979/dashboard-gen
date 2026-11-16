@@ -1,0 +1,290 @@
+software-copyright application: design specification
+========================================================
+
+设计说明书
+(system design specification, GB/T 8567-2006)
+
+软件名称：dashboard-gen V1.0
+著作权人：xuda1979
+编写日期：2026年11月
+文件版本：V1.0
+
+------------------------------------------------------------
+1 引言
+------------------------------------------------------------
+
+1.1 编写目的
+  本文件是 dashboard-gen（智能体落地页 / 内部工具只读仪表板生成器）的软件
+  设计说明书，按照 GB/T 8567-2006《计算机软件文档编制规范》第 5 章「设计说明
+  书」的要求编写。本说明书的读者为软件维护人员、测试人员、软件著作权审查人
+  员以及后续版本开发人员，目的是完整说明本软件的总体设计、模块划分、模块接
+  口与数据处理过程，以支持后续的编码、测试、审阅与维护工作。
+
+1.2 项目背景
+  在日常开发中，每搭建一个内部工具、实验页面或只读监控大盘，都需要重复编写
+  大量 HTML/CSS/JavaScript 样板代码。dashboard-gen 提供一个声明式解决方案：
+  使用者用简洁的 YAML / JSON 描述页面结构与数据，工具生成器将其编译为单个
+  自包含、可离线打开的静态 HTML 文件。产物不依赖任何 CDN 或第三方图表库，
+  可部署于 GitHub Pages、Netlify、对象存储或内网静态服务器，适用于特权内网
+  环境对可控性与可审计性的要求。
+
+1.3 术语定义
+  DSL        领域特定语言（Domain-Specific Language）。本软件中特指用于描述
+             页面结构的 YAML / JSON 文档，包含 title、layout、theme、hero、
+             nav、sections 等根级字段。
+  组件       构成页面内容的最小单元，如 headline（标题）、paragraph（段落）、
+             chart（图表）等，共 13 种。
+  布局       页面内容组织方式：hero / grid / sidebar / section / landing。
+  数据绑定   将图表组件的数据来源解析并绑定到渲染结果的过程；数据可内嵌于
+             DSL，亦可来自构建期文件或运行期只读拉取。
+  运行时     runtime，指内嵌于产物 HTML 中的一段 JavaScript，负责在浏览器
+             端根据内嵌数据绘制 SVG 图表，无需任何外部库。
+
+------------------------------------------------------------
+2 总体设计
+------------------------------------------------------------
+
+2.1 需求规定
+  软件以「输入 DSL → 输出单文件静态 HTML」为总目标，需满足如下功能：
+  a) 解析并校验 YAML / JSON 格式的 DSL；
+  b) 依据 layout 组装页面骨架（hero / nav / 内容区 / 页脚）；
+  c) 渲染 13 种组件，包括 stat、table 与 line/bar/pie 图表；
+  d) 支持内嵌数据、文件数据（file:）与运行期拉取数据（fetch:/self://）；
+  e) 输出零外部依赖的自包含 HTML，内嵌 CSS 令牌与图表运行时；
+  f) 提供命令行工具 dg new/build/watch/serve 与 GitHub Pages 部署工作流；
+  g) 生成的页面满足基础可访问性要求（aria 标签、语义化结构）。
+
+2.2 运行环境
+  a) 生成环境：Node.js ≥ 22（CommonJS）；依赖仅一个运行时包 yaml ^2.9.1。
+  b) 产物运行环境：任何现代浏览器（Chrome / Edge / Firefox / Safari），
+     页面为静态文件，无运行时安装要求。
+
+2.3 系统结构
+  系统采用自顶向下的单进程、单入口管线结构：
+
+       ┌──────────────────────────────────────────────┐
+       │  CLI 入口  bin/dg  ─ lib/cli.js              │
+       │   (new / build / watch / serve)              │
+       └──────────────┬───────────────────────────────┘
+                      │  buildFromSource()
+       ┌──────────────▼───────────────────────────────┐
+       │  lib/build.js                                 │
+       │   renderHtml() = validatePage() + renderPage()│
+       └───────┬──────────────────────┬────────────────┘
+               │ parse/validate       │ render
+       ┌───────▼────────┐     ┌───────▼────────────────┐
+       │ lib/loader.js    │     │ lib/render.js         │
+       │ YAML/JSON解析    │     │ 页面装配+图表数据收集   │
+       │ 字段/布局校验     │     │ collectFetchSpecs     │
+       └─────────────────┘     └───────┬────────────────┘
+                                       │  invoke()
+                              ┌────────▼─────────┐
+                              │ lib/components.js │  逐类渲染组件
+                              └────────┬─────────┘
+                                       │ CSS
+                              ┌────────▼─────────┐
+                              │ lib/style.js     │ BASE_CSS 常量化
+                              │ lib/theme.js     │ 主题令牌
+                              └──────────────────┘
+
+      模块依赖关系（严格向下、无环）：
+        cli → build → { loader, render }
+        render → components → { style, theme }
+        loader / components → errors
+        （theme 亦被 render 引用以生成 :root 令牌）
+
+2.4 模块划分
+  ┌─────────────────┬──────────────────────────────────────────────┐
+  │ 模块             │ 职责                                          │
+  ├─────────────────┼──────────────────────────────────────────────┤
+  │ bin/dg          │ 命令行入口（Node shebang，调用 cli）           │
+  │ lib/errors.js   │ 统一错误类型与格式化（Style/Fetch/DataFile/   │
+  │                 │ Parse 各子类，携带定位路径）                   │
+  │ lib/loader.js   │ DSL 解析（YAML/JSON 探测与 parse）与页面级校验  │
+  │ lib/build.js    │ 构建总线：parse→validate→render 串联          │
+  │ lib/components.js│ 13 种组件的 HTML 片段渲染器 + 转义工具        │
+  │ lib/render.js   │ 页面骨架装配、图表数据收集/绑定、内嵌运行时、   │
+  │                 │ fetch 规格收集、布局主题解析                   │
+  │ lib/style.js    │ BASE_CSS 静态样式常量（含图表/表格/卡片样式）  │
+  │ lib/theme.js    │ 主题令牌默认值（亮/暗两套）                   │
+  │ lib/cli.js      │ 命令解析、构建/监听/静态服务、模板脚手架       │
+  │ scripts/a11y-check.mjs │ 对生成产物做可访问性静态检查           │
+  └─────────────────┴──────────────────────────────────────────────┘
+
+2.5 接口设计
+  2.5.1 外部接口（命令行）
+    Usage:
+      dg new <name> [--template=landing|table|chart|dashboard|fetch]
+      dg build [src]          # 默认查找 dg.dsl.yaml/yml/json 或 site.yaml
+      dg watch [src]          # 构建后监听 DSL 变化自动重建
+      dg serve [dir]          # 默认服务 dist/，监听 PORT 或 4173 端口
+    输出：dist/<name>.html（单文件产物），同名数据 fixture 被一并复制。
+  2.5.2 外部接口（文件输入 / 输出）
+    输入：*.yaml / *.yml / *.json（页面 DSL）。
+    输出：单 HTML 文件，内嵌 <style>、<script>（图表运行时与数据存储
+          window.__DG_DATA__）；如 DSL 声明本地 fetch fixture，构建期
+          复制到产物同目录。
+  2.5.3 内部接口（模块导出）
+    loader： parseDsl(str, filename)→{data}; validatePage(doc);
+             validateFetchUrl(url); SUPPORTED_LAYOUTS; CHART_TYPES。
+    build：  renderHtml(doc, opts); buildFromSource(source, filename, opts)。
+    render： renderPage(doc, opts); collectChartData(...); collectFetchSpecs(
+             data); csvToRows(str); resolveLayout(doc); mergeTheme(doc)。
+    components： COMPONENTS 注册表；invoke(c, state); esc()/attr()/slugify()。
+    cli：    cli(argv); cmdBuild/cmdNew/cmdServe/cmdWatch; watch(srcAbs)。
+
+2.6 数据库设计
+  本软件不使用数据库。仅有的持久化数据形态为：
+  a) 构建期缓存于内存的数据存储对象（render.js 的 store 参数），其数据在
+     页面生成时被序列化为 window.__DG_DATA__；
+  b) 磁盘上由模板复制的静态 fixture 文件（*.json），供运行期 fetch 使用。
+  故不存在表结构、索引、事务等数据库设计内容，此节从略。
+
+------------------------------------------------------------
+3 详细设计
+------------------------------------------------------------
+
+3.1 DSL 解析与校验（lib/loader.js）
+  3.1.1 算法伪代码
+    parseDsl(str, filename):
+      1) 取前 80 行样本，去除 BOM 后 trimStart；
+      2) 若以 '{' 或 '[' 开头 → JSON.parse，失败抛 ParseError；
+      3) 否则 YAML.parse(str, {prettyErrors:true})，失败抛 ParseError；
+      4) 返回 { data: 顶层对象 }。
+    validatePage(doc):
+      1) 顶层必须是对象（非 null、非数组），否则 StyleError；
+      2) title / description 若存在必须为字符串（requireString）；
+      3) layout 若存在必须为字符串且首词属于 SUPPORTED_LAYOUTS
+         =['hero','grid','sidebar','section','landing']，否则抛出
+         带『支持布局列表』提示的 StyleError；
+      4) theme 必须为对象（CSS 令牌映射）或缺失；
+      5) sections 必须为数组或缺失；hero 必须为数组或 {content:[...]}
+         对象；nav 必须为 {label,href} 数组或缺失。
+  validateFetchUrl(url):
+      1) 无协议前缀的相对路径直接放行（如 market.json）；
+      2) 有协议则用 URL 解析；仅允许 http/https/self 协议；
+      3) http(s) URL 必须含有效 host（含点号），否则 FetchSpecError。
+
+  3.1.2 关键数据结构
+    data：     由 YAML/JSON 解析得到的普通对象树，字段直接对应 DSL。
+    SUPPORTED_LAYOUTS / CHART_TYPES：模块级常量数组，供校验与渲染共享。
+
+  3.1.3 关键流程
+    解析与校验是构建管线的第一道关卡，所有非法 DSL 在进入渲染前即以
+    带路径定位的可读错误被拒绝，保证下游模块只处理结构正确的数据。
+
+3.2 组件渲染（lib/components.js）
+  3.2.1 通用机制
+    组件以函数表 COMPONENTS 注册：{ headline: renderHeadline, ... }；
+    invoke(c, state) 依据 c.type 分派，未知类型抛 StyleError。所有组件
+    结果均为 HTML 片段字符串；所有文本经 esc() 做 HTML 实体转义
+    （& < > " '）以防御注入。
+  3.2.2 stat 组件（renderStat）算法
+    1) 解析 value/label/prefix/suffix/caption；
+    2) delta 支持 数字 / 数字串 / {value, tone:good|bad|neutral} 三种形态，
+       归一化为数值 raw，tone 白名单过滤后生成 ▲/▼ 文本与修饰类名；
+    3) progress 数值做 clamp[0,100]，progressTone 白名单过滤，输出
+       带 aria-label 的进度条 div（role="img"）；
+    4) 最终拼装 <div class="dg-stat" role="img" aria-label="…">。
+  3.2.3 数据表渲染（rowsToTableData / renderTable）算法
+    输入 rows 为「数组套数组」或「对象数组」：
+    - 数组套数组：首行全为 字符串/数字 且无 header:false 时，
+      首行作为表头，其余为表体；
+    - 对象数组：取各键之并集作为表头，逐行按键取值。
+    输出 <table> 结构：表头 th scope="col"，无表头时首列 th scope="row"，
+    包于 .dg-scroll 横向滚动容器，可选 aria-label（caption）。
+  3.2.4 chart 组件（renderChart）
+    仅输出图表宿主壳（placeholder）：带 data-chart-type/title/data/source/
+    swatches/start 属性与 role="img"、aria-label 的 <div class="dg-figure">，
+    实际 SVG 由内嵌运行时在浏览器端绘制（见 3.5）。
+
+3.3 页面装配与数据收集（lib/render.js）
+  3.3.1 页面骨架结构
+    <!doctype html><html lang="…"><head><style>
+    <body>:
+      <a class="skip-link" href="#main">
+      <header class="dg-hero">（页面级 hero / nav）
+      主体：按 layout 分派
+        hero    → .dg-hero-layout 多列
+        grid    → .dg-layout-grid 自动填充网格
+        sidebar → 首个含 nav 的分节作左侧 .dg-sidebar 粘性栏
+        section/landing → 纵向分段
+      各 section 内部按固定顺序渲染：nav→hero→content
+      <main id="main">
+      <footer class="dg-footer">
+    <script>（运行时 + window.__DG_DATA__）
+  <html> 使用 resolveLayout(doc) 决定布局名与 hero 提取策略，theme 令牌经
+  mergeTheme(doc) 合成 :root 变量与深色模式变量。
+
+  3.3.2 图表数据收集 collectChartData（核心算法）
+    目标：服务端以与渲染完全一致的遍历顺序为每张图分配自增 id
+    （chart-0、chart-1…），并用同一 id 键入内嵌数据存储
+    window.__DG_DATA__，保证宿元 data-chart-data 与存储一一对应。
+    算法：
+      1) 重置自增计数器 inlineSeq=0；
+      2) 若 page.hero 存在：取其组件列表（数组原样，或对象.content），
+         深度遍历（visit）其中遇到的所有 chart 组件；
+      3) 对每个 section （按下标顺序）依次 visit 其 nav、hero、content
+         三块（按此固定顺序，与渲染端 asWidgets 顺序一致）；
+      4) visit 中对 chart 组件：dataId = `chart-${inlineSeq++}`；
+         依据数据来源分派：
+           data 内嵌（数组 / {csv} / {json}）→ csvToRows 或直存，
+             记入 store[dataId]；
+           file: 路径      → 读取文件按后缀解析为行数据存入 store；
+           fetch 规格      → 记入 fetchSpecs（运行时拉取，不入 store）。
+    该固定遍历序保证了：无论 DSL 中 section 的各键书写顺序如何
+    （content 写在 nav/hero 之前），存储键与页面宿元引用均对齐。
+
+  3.3.3 CSV 解析 csvToRows(str)
+    逐行 split；去除空白行；含引号时做引号转义处理；返回行数组，首行
+    可作表头，供 line/bar/pie 运行时取「首列=类别，其余列=序列」。
+
+3.4 样式与主题（lib/style.js / lib/theme.js）
+  BASE_CSS 为模块内静态模板字符串常量，覆盖基础/布局/排版/响应网格/按钮/
+  侧边栏/card/stat/徽章/分隔线/表格/图表 等全部类，色值通过 CSS 变量
+  var(--accent) 等与主题令牌解耦。theme.js 提供 THEME 默认令牌（亮色）与
+  DARK_THEME（暗色），mergeTheme 将 DSL theme 字段与默认令牌合并生成
+  :root 与 @media (prefers-color-scheme: dark) 两组 CSS 变量。
+
+3.5 内嵌图表运行时（render.js 内 CHART_RUNTIME_SRC）
+  3.5.1 职责
+    页面加载完成后，运行时读取每个宿元的 data-chart-type/title/data/
+    source/swatches/start 属性，从 window.__DG_DATA__ 取行数据（或按
+    data-chart-source fetch 拉取），调用对应绘图函数生成内联 SVG。
+  3.5.2 线图（line）算法
+    1) 规范化行数据为 {label, series:{key:value}} 数组；
+    2) 计算系列键集合、值域 [min,max]（含 start 起点可指定 X 轴起点）；
+    3) 把数据线性映射到视图坐标：X = pad + col*(w-2pad)/(n-1)，
+       Y = h - pad - (v-min)/(max-min)*(h-2pad)；
+    4) 为每个系列生成 <polyline points> 或逐段 <line> 并通过
+       <g stroke=颜色 clip-path> 裁剪，另绘 X 轴刻度文本与图例。
+  3.5.3 条形图（bar）算法
+    逐类别在其柱槽内按系列数均分宽度：barW = slotW * (1/系列数)，
+    高度 hBar = (v/min/max 比例)*(可用高)，生成 <rect x y width height>
+    并叠加 grid 线，支持负值基线处理。
+  3.5.4 饼图（pie）算法
+    单行多键 → 每键一片；或多行 {label,value} → 每行一片。以
+    扇形（svg path A 弧）构造：每片角度 = value/Σvalue*360，累加
+    起始角，生成 <path d="M cx,cy L x0,y0 A r,r 0 大弧标志 1 x1,y1 Z">，
+    并生成图例（色块+标签+值）。
+  3.5.5 数据缺失说明
+    当 store 无数据 / fetch 失败 / 数据为空时，容器内渲染
+    「No data to draw」错误占位（.dg-error 样式），保证页面结构完整。
+
+3.6 命令行与安全（lib/cli.js）
+  3.6.1 serve 静态服务安全设计（关键）
+    1) 在 URL 归一化之前，对原始请求路径做穿越检测：
+       正则 (^|/)\.\.(/|$) 或 %2e%2e（大小写不敏感）命中 → 403；
+    2) decodeURIComponent 解析路径，解析抛错（畸形百分号编码）→ 400；
+    3) path.resolve(dir, rel) 后要求结果以 dir+sep 为前缀，
+       否则 403（path.join 前缀检查不足，改用 resolve+startswith）；
+    4) 按扩展名映射 MIME，缺省 application/octet-stream。
+  3.6.2 watch 模式
+    fs.watch 监视源文件所在目录；编辑器保存产生的 rename/delete+create
+    事件（filename 可能为 null）同样触发重建；重建失败仅打印错误不退出。
+
+3.7 可访问性检查脚本（scripts/a11y-check.mjs）
+  对产物 HTML 做正则/字符串级静态断言：跳过链接、lang 属性、main 唯一、
+  nav 标签、表格 scope 属性、图表 role="img" 与 aria-label 等；缺失
+  任一规则即以非零退出码报告，供 CI 或人工校验使用。
+EOF
