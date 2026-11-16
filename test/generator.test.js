@@ -724,6 +724,23 @@ function ExampleTmp() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'dg-fixture-'));
 }
 
+test('JSON DSL source builds like YAML', () => {
+  const doc = {
+    title: 'json site',
+    description: 'from json',
+    sections: [{ content: [{ type: 'card', title: 'C', text: 'ok' }] }],
+  };
+  const html = buildFromSource(JSON.stringify(doc), 'site.json');
+  assert.match(html, /<title>json site<\/title>/);
+  assert.strictEqual(html.includes('<meta name="generator"'), true);
+  assert.match(html, /class="dg-card"/);
+  // A JSON array at top level is not a valid page — must fail as a style error.
+  assert.throws(
+    () => buildFromSource(JSON.stringify([{ title: 'bad' }]), 'list.json'),
+    (err) => err.name === 'StyleError'
+  );
+});
+
 // ---------------------------------------------------------------------------
 // fetch example
 // ---------------------------------------------------------------------------
