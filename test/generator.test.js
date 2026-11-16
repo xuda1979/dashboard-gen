@@ -1584,6 +1584,41 @@ test('unknown CLI command fails with an error', () => {
   }
 });
 
+test('bare cli and -h/--help/help all print usage without failing', () => {
+  // README CLI: `dg` with no arguments (and the -h / --help / help spellings)
+  // must print the usage block and not touch the exit code. The help text is
+  // also the place users first learn the four commands and the offline output,
+  // so the core commands and the single-file guarantee are pinned verbatim.
+  const { cli } = require('../lib/cli');
+  const origOut = console.log;
+  const origExit = process.exitCode;
+  const captures = [];
+  for (const argv of [[], ['help'], ['--help'], ['-h']]) {
+    let out = '';
+    console.log = (s) => { out += String(s); };
+    try {
+      cli(argv);
+    } finally {
+      console.log = origOut;
+    }
+    captures.push({ argv, out });
+  }
+  try {
+    for (const { argv, out } of captures) {
+      assert.match(out, /^dashboard-gen — declarative YAML\/JSON -> static single-file page/, `help header for ${JSON.stringify(argv)}`);
+      assert.match(out, /dg new <name>/, `new command listed for ${JSON.stringify(argv)}`);
+      assert.match(out, /dg build \[src\]/, `build command listed for ${JSON.stringify(argv)}`);
+      assert.match(out, /dg watch \[src\]/, `watch command listed for ${JSON.stringify(argv)}`);
+      assert.match(out, /dg serve \[dir\]/, `serve command listed for ${JSON.stringify(argv)}`);
+      assert.match(out, /--template=<t>/, `template flag documented for ${JSON.stringify(argv)}`);
+      assert.match(out, /dist\/<name>\.html\s+single self-contained page \(no CDN, offline-openable\)/, `offline guarantee stated for ${JSON.stringify(argv)}`);
+    }
+    assert.strictEqual(process.exitCode, 0, 'no exit code set by help paths');
+  } finally {
+    process.exitCode = origExit === undefined ? 0 : origExit;
+  }
+});
+
 test('dg new -t fetch scaffolds a project with fixture, workflow, and deps', () => {
   const { cmdNew } = require('../lib/cli');
   const os = require('node:os');
