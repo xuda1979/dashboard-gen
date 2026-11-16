@@ -227,6 +227,23 @@ test('chart swatches stay inside an attribute (no raw JSON in markup)', () => {
   assert.ok(!html.includes('data-chart-swatches={"Organic":"#16a34a"}'), 'swatches escaped');
 });
 
+test('chart start option is emitted as a data-chart-start attribute', () => {
+  const withStart = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{ type: 'chart', kind: 'line', title: 'Price', start: '2024-01-01', data: [['x', 1]] }],
+    }],
+  });
+  assert.match(withStart, /data-chart-start="2024-01-01"/);
+
+  // absent start must not leave an empty attribute behind
+  const without = renderHtml({
+    title: 't',
+    sections: [{ content: [{ type: 'chart', kind: 'line', title: 'Price', data: [['x', 1]] }] }],
+  });
+  assert.ok(!/data-chart-start="/.test(without), 'no data-chart-start without start:');
+});
+
 test('chart source attribute equals the fetch url (used by the runtime)', () => {
   const doc = {
     title: 't',

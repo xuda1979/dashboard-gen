@@ -87,7 +87,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `quote`      | `text`, `cite`                                          |
 | `grid`       | `items[]`, `columns`, `columnWidth`                     |
 | `table`      | `rows` (array-of-arrays or array-of-objects), `caption`, `header` |
-| `chart`      | `kind` (line/bar/pie), `title`, `caption`, `data`/`file`/`fetch` |
+| `chart`      | `kind` (line/bar/pie), `title`, `caption`, `start`, `data`/`file`/`fetch` |
 
 ## Data binding
 

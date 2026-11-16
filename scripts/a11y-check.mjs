@@ -61,10 +61,13 @@ for (const tag of imgs) {
   }
 }
 
-// 6. chart figures with role="img" need aria-label
+// 6. chart figures with role="img" need an accessible name. The renderer
+//    always emits aria-label (caption || title); data-chart-caption was a
+//    stale attribute that the renderer never emitted, so only aria labels are
+//    checked here.
 const figs = html.match(/<div class="dg-figure dg-chart"[^>]*>/g) || [];
 for (const tag of figs) {
-  if (/\brole="img"/.test(tag) && !/\bdata-chart-caption="[^"]+"/.test(tag) && !/\baria-label="/.test(tag) && !/\baria-labelledby=/.test(tag)) {
+  if (/\brole="img"/.test(tag) && !/\baria-label="/.test(tag) && !/\baria-labelledby=/.test(tag)) {
     problems.push(`chart figure missing accessible name: ${tag.slice(0, 90)}`);
   }
 }
