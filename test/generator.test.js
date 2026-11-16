@@ -1801,6 +1801,38 @@ test('dg new with an unknown template fails and scaffolds nothing', () => {
   }
 });
 
+test('dg new with a bare --template/-t flag (no value) fails cleanly', () => {
+  // parseArgs treats a trailing flag with no value as boolean true. A bare
+  // `--template` or `-t` therefore must not silently pick a default template:
+  // cmdNew rejects the boolean as an unknown template and scaffolds nothing.
+  const { cli } = require('../lib/cli');
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-bareflag-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  let errMsg = '';
+  console.error = (s) => { errMsg += String(s); };
+  try {
+    cli(['new', 'bareproj', '--template']);
+    cli(['new', 'bareproj2', '-t']);
+    assert.strictEqual(
+      (errMsg.match(/Unknown template "true"/g) || []).length,
+      2,
+      'one rejection per bare template flag'
+    );
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on a bare template flag');
+    assert.ok(!fs.existsSync(path.join(cwd, 'bareproj')), 'no directory for bare --template');
+    assert.ok(!fs.existsSync(path.join(cwd, 'bareproj2')), 'no directory for bare -t');
+  } finally {
+    console.error = origErr;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('dg new refuses to overwrite an existing directory', () => {
   // `dg new <name>` must not clobber a directory that is already there (the
   // name may hold real work); it fails with a hint and leaves every file alone.
