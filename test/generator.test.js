@@ -825,6 +825,30 @@ test('page-level nav auto-links section titles when no nav key is given', () => 
   assert.match(html, /id="s-docs-more"/);
 });
 
+test('duplicate section titles get deduped anchor ids shared with the auto nav', () => {
+  // Two sections titled "Same" must not emit duplicate id="s-same" attributes
+  // (invalid HTML with ambiguous anchors); the second becomes s-same-2, and the
+  // auto nav links to the deduped id so every anchor still resolves.
+  const doc = {
+    title: 'dedupe',
+    sections: [
+      { title: 'Same', content: [{ type: 'paragraph', text: 'a' }] },
+      { title: 'Same', content: [{ type: 'paragraph', text: 'b' }] },
+      { title: 'Also Same', content: [{ type: 'paragraph', text: 'c' }] },
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<h2 class="dg-section-title" id="s-same">Same<\/h2>/);
+  assert.match(html, /<h2 class="dg-section-title" id="s-same-2">Same<\/h2>/);
+  assert.match(html, /<h2 class="dg-section-title" id="s-also-same">Also Same<\/h2>/);
+  assert.match(html, /<li><a class="dg-navlink" href="#s-same">Same<\/a><\/li>/);
+  assert.match(html, /<li><a class="dg-navlink" href="#s-same-2">Same<\/a><\/li>/);
+  assert.match(html, /<li><a class="dg-navlink" href="#s-also-same">Also Same<\/a><\/li>/);
+  // No duplicate id attributes anywhere on the page.
+  const ids = [...html.matchAll(/id="s-([^"]+)"/g)].map((m) => m[1]);
+  assert.strictEqual(new Set(ids).size, ids.length, 'section anchor ids are unique');
+});
+
 test('unknown component type raises readable error', () => {
   const doc = { title: 'x', sections: [{ content: [{ type: 'nope' }] }] };
   assert.throws(
