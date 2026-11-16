@@ -671,6 +671,27 @@ test('link with style button renders as a button-styled anchor', () => {
   assert.match(html, /<a href="#plain" class="dg-link">Plain<\/a>/);
 });
 
+test('link falls back to label key and headline defaults to h2', () => {
+  // README: link takes `text`/`label` (the label form must render as the link
+  // text); headline takes `level` (1-6) with an implicit default of h2 when
+  // absent, and out-of-range levels fall back to h2.
+  const doc = {
+    title: 'label',
+    sections: [{
+      content: [
+        { type: 'link', label: 'Docs', href: '#docs' },
+        { type: 'headline', text: 'Fallback head' },
+        { type: 'headline', text: 'Wild head', level: 9 },
+      ],
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<a href="#docs" class="dg-link">Docs<\/a>/);
+  assert.match(html, /<h2 class="dg-headline dg-h2">Fallback head<\/h2>/);
+  assert.match(html, /<h2 class="dg-headline dg-h2">Wild head<\/h2>/);
+  assert.ok(!html.includes('<h9'), 'out-of-range level never renders raw');
+});
+
 test('chart and table captions surface as aria-labels and notes', () => {
   // README: table takes a `caption` (rendered as the table aria-label) and
   // chart takes a `caption` (rendered as the figure aria-label plus a visible
