@@ -309,6 +309,44 @@ test('dg build with a missing DSL arg fails with an error', () => {
   }
 });
 
+test('dg build pointing at a directory fails cleanly instead of an EISDIR stack', () => {
+  // ensureArg guards existence but the arg can still be a directory; a raw
+  // readFileSync EISDIR stack must not leak. The CLI surfaces the same
+  // one-line ParseError style with exit code 1 for `dg build <dir>` and for
+  // `dg watch <dir>` (both go through ensureArg).
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-dir-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  fs.mkdirSync(path.join(tmp, 'site'));
+  fs.mkdirSync(path.join(tmp, 'watchdir'));
+
+  const origWrite = process.stderr.write;
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  let errMsg = '';
+  process.stderr.write = (s) => { errMsg += String(s); return true; };
+  console.error = (s) => { errMsg += String(s); };
+  try {
+    cli(['build', 'site']);
+    assert.match(errMsg, /DSL source is a directory, not a file: site/);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on directory source');
+
+    errMsg = '';
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    cli(['watch', 'watchdir']);
+    assert.match(errMsg, /DSL source is a directory, not a file: watchdir/);
+    assert.strictEqual(process.exitCode, 1, 'watch rejects a directory source too');
+    assert.ok(!/EISDIR|\bat /.test(errMsg), 'no raw fs stack trace leaks through');
+  } finally {
+    process.stderr.write = origWrite;
+    console.error = origErr;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Accessibility + no-external-resource (AC2/AC5 invariants on every example)
 // ---------------------------------------------------------------------------
