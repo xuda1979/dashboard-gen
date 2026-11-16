@@ -454,6 +454,31 @@ test('page description is emitted as a meta tag', () => {
   assert.match(html, /<meta name="description" content="A lovely page.">/);
 });
 
+test('page lang maps to html lang and invalid values fall back to en', () => {
+  // README-less but load-bearing: the generated <html lang> drives the a11y
+  // lint's lang check. A custom BCP-47 value passes through, region tags
+  // survive, and anything that is not a plain {lang} or {lang-TAG} shape falls
+  // back to en so the page stays valid. Only the default en was pinned before.
+  const en = renderHtml({ title: 't', sections: [] });
+  assert.match(en, /<html lang="en">/, 'defaults to en');
+
+  const fr = renderHtml({ title: 't', lang: 'fr', sections: [] });
+  assert.match(fr, /<html lang="fr">/, 'custom lang passes through');
+
+  const us = renderHtml({ title: 't', lang: 'en-US', sections: [] });
+  assert.match(us, /<html lang="en-US">/, 'lang-region form survives');
+
+  const bad = renderHtml({ title: 't', lang: '!!', sections: [] });
+  assert.match(bad, /<html lang="en">/, 'invalid lang falls back to en');
+});
+
+test('missing title falls back to Dashboard in the page head', () => {
+  // renderHtml must not emit an empty <title>: a page without a title key
+  // falls back to "Dashboard" so the document always has a name.
+  const html = renderHtml({ sections: [] });
+  assert.match(html, /<title>Dashboard<\/title>/);
+});
+
 test('numeric grid columnWidth is treated as pixels', () => {
   const doc = {
     title: 't',
