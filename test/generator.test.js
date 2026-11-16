@@ -532,10 +532,23 @@ test('dg build fails cleanly when a plain file squats on the output directory', 
     assert.match(errMsg, /Output directory is a file, not a directory: dist/);
     assert.ok(!/EEXIST|\bat /.test(errMsg), 'watch reports the same clean diagnostic');
     assert.strictEqual(process.exitCode, 1, 'watch sets a failing exit code too');
+
+    // Nested output path: with a file squatted on dist/ and DG_OUTPUT pointing
+    // into it, the recursive mkdir would throw a raw ENOTDIR; the guard must
+    // walk the path and blame the offending ancestor.
+    errMsg = '';
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.env.DG_OUTPUT = 'sub/site.html';
+    cli(['build', 'site.yaml']);
+    delete process.env.DG_OUTPUT;
+    assert.match(errMsg, /Output directory is a file, not a directory: dist/);
+    assert.ok(!/ENOTDIR|EEXIST|\bat /.test(errMsg), 'no raw ENOTDIR/EEXIST stack leaks');
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on a nested file-squatted output dir');
   } finally {
     process.stderr.write = origWrite;
     console.error = origErr;
     if (watcher) watcher.close();
+    delete process.env.DG_OUTPUT;
     process.exitCode = origExit === undefined ? 0 : origExit;
     process.chdir(origCwd);
   }
