@@ -979,6 +979,20 @@ test('hero layout renders sections as hero columns', () => {
   assert.match(html, /Supporting text/);
 });
 
+test('single-object section content is normalized like nav/hero', () => {
+  // A section may carry `content:` as a single component object (nav/hero
+  // accept one via normalizeWidgets); the section must render it instead of
+  // silently dropping the widget.
+  const doc = {
+    title: 'single-content',
+    sections: [{
+      content: { type: 'paragraph', text: 'Only content object' },
+    }],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /Only content object/);
+});
+
 test('section hero renders as a sub-hero strip above content', () => {
   // README: sections may carry `hero:` (a sub-hero strip) in addition to
   // `content:`; under the default landing layout it renders inside the section
