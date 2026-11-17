@@ -2237,6 +2237,18 @@ test('content item without a string type raises StyleError', () => {
   );
 });
 
+test('renderPage renders an empty hero when hero content is not a list', () => {
+  // renderComponents defensively treats a non-array component list as an empty
+  // render. renderHtml can never reach that arm (validatePage rejects a
+  // { content: <non-array> } hero), but renderPage is exported directly for
+  // embedding and does not validate, so it must degrade the same way instead
+  // of crashing on the missing .map.
+  const { renderPage } = require('../lib/render');
+  const html = renderPage({ title: 't', hero: { content: 'not-a-list' }, sections: [] });
+  assert.match(html, /<header class="dg-hero"><div class="dg-hero-inner"><\/div><\/header>/, 'non-list hero content renders an empty hero');
+  assert.ok(html.includes('</html>'), 'page still renders in full');
+});
+
 function ExampleTmp() {
   const os = require('node:os');
   return fs.mkdtempSync(path.join(os.tmpdir(), 'dg-fixture-'));
