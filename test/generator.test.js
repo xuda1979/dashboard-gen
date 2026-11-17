@@ -3312,6 +3312,70 @@ test('fixture-copy walk skips null section entries past which fixtures still cop
 });
 
 // ---------------------------------------------------------------------------
+// dg build --check lints the built page with the shared a11y checks and fails
+// the build (exit 1) when a hard invariant is violated
+// ---------------------------------------------------------------------------
+
+test('dg build --check passes on a compliant page and leaves exit code 0', () => {
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-check-ok-'));
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), [
+    'title: t',
+    'sections:',
+    '  - title: S',
+    '    content:',
+    '      - type: paragraph',
+    '        text: hi',
+    '',
+  ].join('\n'));
+
+  const { cli } = require('../lib/cli');
+  const origExit = process.exitCode;
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    cli(['build', 'dg.dsl.yaml', '--check']);
+    assert.ok(fs.existsSync(path.join(tmp, 'dist', 'site.html')), 'page built');
+    assert.strictEqual(process.exitCode, origExit === undefined ? 0 : origExit, 'no failure exit code set');
+  } finally {
+    process.chdir(origCwd);
+    process.exitCode = origExit === undefined ? 0 : origExit;
+  }
+});
+
+test('dg build --check fails with exit code 1 when the page violates a11y invariants', () => {
+  // A compliant page that only violates contrast (AA 4.5:1) must still be
+  // written to dist, but --check must fail the build with a diagnostic.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-check-bad-'));
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), [
+    'title: t',
+    'theme:',
+    '  pageBg: "#ffffff"',
+    '  textColor: "#f5f5f5"',
+    'sections:',
+    '  - title: S',
+    '    content:',
+    '      - type: paragraph',
+    '        text: hi',
+    '',
+  ].join('\n'));
+
+  const { cli } = require('../lib/cli');
+  const origExit = process.exitCode;
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    cli(['build', 'dg.dsl.yaml', '--check']);
+    assert.ok(fs.existsSync(path.join(tmp, 'dist', 'site.html')), 'page still written before the check fails');
+    assert.strictEqual(process.exitCode, 1, 'failing a11y check sets exit code 1');
+  } finally {
+    process.chdir(origCwd);
+    process.exitCode = origExit === undefined ? 0 : origExit;
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Watch rebuilds on bound data changes (chart file: bindings + local fetch
 // fixtures live outside the DSL and are edited independently of it)
 // ---------------------------------------------------------------------------
