@@ -32,9 +32,9 @@ test('landing example produces a single HTML page', () => {
 
 test('dashboard runbook section exercises the remaining component library', () => {
   // The flagship example doubles as the component showcase: alongside the
-  // grid/stat/table/chart sections it now renders callout, list, divider,
-  // quote, code, and badge — the components no other example uses — so the
-  // canonical DSL proves the full 15-component library renders in one page.
+  // grid/stat/table/chart sections it now renders callout, steps, divider,
+  // quote, code, badge, and kv — the components no other example uses — so the
+  // canonical DSL proves the full 17-component library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -60,6 +60,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     'code block joins its lines with newlines and keeps shell syntax verbatim'
   );
   assert.match(html, /<span class="dg-badge dg-badge--success">healthy<\/span>/);
+  assert.match(
+    html,
+    /<dl class="dg-kv"><div class="dg-kv-row"><dt>Service<\/dt><dd>billing-worker<\/dd><\/div><div class="dg-kv-row"><dt>Revision<\/dt><dd>f3a9c21<\/dd><\/div><div class="dg-kv-row"><dt>Region<\/dt><dd>eu-west-1<\/dd><\/div><div class="dg-kv-row"><dt>Owner<\/dt><dd>Platform &lt;\/team&gt;<\/dd><\/div><\/dl>/,
+    'runbook closes with a kv definition list'
+  );
 });
 
 test('table example renders semantic table with headers and aria label', () => {
@@ -1294,6 +1299,45 @@ test('steps escapes item text and guards against a missing items array', () => {
   });
   assert.match(html, /<span class="dg-steps-text">Stage files: &lt;src&gt;\/app\.js &amp; co<\/span>/);
   assert.match(html, /<ol class="dg-steps"><\/ol>/, 'missing items yields an empty list container');
+});
+
+test('kv component renders a definition list of key/value pairs', () => {
+  const html = renderHtml({
+    title: 'spec',
+    sections: [{
+      content: [
+        { type: 'kv', items: [
+          { key: 'Service', value: 'billing-worker' },
+          { key: 'Revision', value: 'f3a9c21' },
+        ] },
+      ],
+    }],
+  });
+  assert.match(
+    html,
+    /<dl class="dg-kv"><div class="dg-kv-row"><dt>Service<\/dt><dd>billing-worker<\/dd><\/div><div class="dg-kv-row"><dt>Revision<\/dt><dd>f3a9c21<\/dd><\/div><\/dl>/,
+    'each item renders a dt term and a dd value'
+  );
+});
+
+test('kv accepts label keys, escapes text, and guards against a missing items array', () => {
+  const html = renderHtml({
+    title: 'spec',
+    sections: [{
+      content: [
+        { type: 'kv', items: [
+          { label: 'Owner', value: 'Platform <team>' },
+          'bare-string-item',
+          { value: 'orphan value' },
+        ] },
+        { type: 'kv' },
+      ],
+    }],
+  });
+  assert.match(html, /<dt>Owner<\/dt><dd>Platform &lt;team&gt;<\/dd>/);
+  assert.match(html, /<dt>bare-string-item<\/dt><dd><\/dd>/, 'a plain string item becomes a term with an empty value');
+  assert.match(html, /<dt><\/dt><dd>orphan value<\/dd>/, 'an object item with no key or label still renders its value');
+  assert.match(html, /<dl class="dg-kv"><\/dl>/, 'missing items yields an empty definition list');
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {

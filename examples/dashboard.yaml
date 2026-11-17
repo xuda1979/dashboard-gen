@@ -137,3 +137,10 @@ sections:
       - type: badge
         tone: success
         text: healthy
+
+      - type: kv
+        items:
+          - { key: Service, value: billing-worker }
+          - { key: Revision, value: f3a9c21 }
+          - { key: Region, value: eu-west-1 }
+          - { key: Owner, value: Platform </team> }
