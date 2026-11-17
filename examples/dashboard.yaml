@@ -144,3 +144,7 @@ sections:
           - { key: Revision, value: f3a9c21 }
           - { key: Region, value: eu-west-1 }
           - { key: Owner, value: Platform </team> }
+
+      - type: image
+        file: ops-console.svg
+        caption: Ops Console status strip

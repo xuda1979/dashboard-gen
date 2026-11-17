@@ -33,8 +33,8 @@ test('landing example produces a single HTML page', () => {
 test('dashboard runbook section exercises the remaining component library', () => {
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
-  // quote, code, badge, and kv — the components no other example uses — so the
-  // canonical DSL proves the full 17-component library renders in one page.
+  // quote, code, badge, kv, and image — the components no other example uses —
+  // so the canonical DSL proves the full 18-component library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -64,6 +64,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<dl class="dg-kv"><div class="dg-kv-row"><dt>Service<\/dt><dd>billing-worker<\/dd><\/div><div class="dg-kv-row"><dt>Revision<\/dt><dd>f3a9c21<\/dd><\/div><div class="dg-kv-row"><dt>Region<\/dt><dd>eu-west-1<\/dd><\/div><div class="dg-kv-row"><dt>Owner<\/dt><dd>Platform &lt;\/team&gt;<\/dd><\/div><\/dl>/,
     'runbook closes with a kv definition list'
+  );
+  assert.match(
+    html,
+    /<figure class="dg-figure dg-image" aria-label="Ops Console status strip"><img src="data:image\/svg\+xml;utf8,.*" alt="Ops Console status strip"><figcaption class="dg-image-caption">Ops Console status strip<\/figcaption><\/figure>/,
+    'runbook embeds the SVG asset as a data-URI image with a labelled figure'
   );
 });
 
@@ -1338,6 +1343,83 @@ test('kv accepts label keys, escapes text, and guards against a missing items ar
   assert.match(html, /<dt>bare-string-item<\/dt><dd><\/dd>/, 'a plain string item becomes a term with an empty value');
   assert.match(html, /<dt><\/dt><dd>orphan value<\/dd>/, 'an object item with no key or label still renders its value');
   assert.match(html, /<dl class="dg-kv"><\/dl>/, 'missing items yields an empty definition list');
+});
+
+test('image component inlines an SVG file as a data URI with a labelled figure', () => {
+  const fileDir = ExampleTmp();
+  fs.writeFileSync(
+    path.join(fileDir, 'badge.svg'),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#0ea5e9"/></svg>'
+  );
+  const html = renderHtml(
+    {
+      title: 'imgs',
+      sections: [{ content: [
+        { type: 'image', file: 'badge.svg', caption: 'Env health' },
+        { type: 'image', file: 'badge.svg', alt: 'Bare square', width: 40, height: 20 },
+        { type: 'image', file: 'badge.svg' },
+      ] }],
+    },
+    { fileDir }
+  );
+  assert.match(
+    html,
+    /<figure class="dg-figure dg-image" aria-label="Env health"><img src="data:image\/svg\+xml;utf8,[^"]+" alt="Env health"[^>]*><figcaption class="dg-image-caption">Env health<\/figcaption><\/figure>/,
+    'SVG embeds as a text data URI inside a labelled figure'
+  );
+  // With no caption the image stays a plain <img> carrying its explicit alt;
+  // width/height pass through as attributes.
+  assert.match(
+    html,
+    /<img src="data:image\/svg\+xml;utf8,[^"]+" alt="Bare square" width="40" height="20">/,
+    'an alt-only image stays a plain <img> and forwards width/height'
+  );
+  // A bare image with neither alt nor caption still emits alt (a11y check 5).
+  assert.match(
+    html,
+    /<img src="data:image\/svg\+xml;utf8,[^"]+" alt="">(?![^<]*<figcaption)/,
+    'missing alt and caption falls back to an empty alt attribute on a bare img'
+  );
+  assert.ok(html.split('data:image/svg+xml').length - 1 === 3, 'all three images embed the asset');
+});
+
+test('image component verifies the asset exists and supports raster mimes', () => {
+  const fileDir = ExampleTmp();
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="4" height="4"/>';
+  fs.writeFileSync(path.join(fileDir, 'pixel.svg'), svg);
+  fs.writeFileSync(path.join(fileDir, 'pixel.png'), Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+
+  // Raster (png) embeds as base64 under the mapped mime.
+  const raster = renderHtml(
+    { title: 't', sections: [{ content: [{ type: 'image', file: 'pixel.png', alt: 'Pixel' }] }] },
+    { fileDir }
+  );
+  assert.match(raster, /src="data:image\/png;base64,[^"]+"/, 'png maps to image/png base64');
+
+  // Absolute paths resolve without fileDir.
+  const abs = renderHtml(
+    { title: 't', sections: [{ content: [{ type: 'image', file: path.join(fileDir, 'pixel.svg'), alt: 'A' }] }] },
+    {}
+  );
+  assert.match(abs, /data:image\/svg\+xml;utf8,/);
+
+  // Missing file, unsupported extension, and empty path all raise DataFileError.
+  const missing = () =>
+    renderHtml({ title: 't', sections: [{ content: [{ type: 'image', file: 'nope.png', alt: 'x' }] }] }, { fileDir });
+  assert.throws(
+    missing,
+    (err) => err.name === 'DataFileError'
+      && /Could not read image file "nope\.png" \(ENOENT\)/.test(err.message)
+  );
+  fs.writeFileSync(path.join(fileDir, 'blob.bmp'), 'x');
+  assert.throws(
+    () => renderHtml({ title: 't', sections: [{ content: [{ type: 'image', file: 'blob.bmp', alt: 'x' }] }] }, { fileDir }),
+    (err) => err.name === 'DataFileError' && /Unsupported image extension "\.bmp"/.test(err.message)
+  );
+  assert.throws(
+    () => renderHtml({ title: 't', sections: [{ content: [{ type: 'image', alt: 'x' }] }] }, { fileDir }),
+    (err) => err.name === 'DataFileError' && /image "file" must be a non-empty path/.test(err.message)
+  );
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {
