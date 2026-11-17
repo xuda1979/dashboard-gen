@@ -28,6 +28,7 @@ CLI commands:
 | `dg build [src]`   | Render DSL → `dist/<name>.html`                     |
 | `dg build --check` | Build, then lint the page for a11y and fail the build on errors |
 | `dg watch [src]`   | Build, then rebuild when the DSL (or a bound data file/fixture) changes |
+| `dg watch --check` | Same, and lint every rebuilt page for a11y; exit 1 on violations (watcher keeps running) |
 | `dg serve [dir]`   | Static server for `dist/` at `localhost:4173`       |
 
 ## Page model (the DSL)
@@ -117,6 +118,7 @@ fold the same checks into the build:
 ```sh
 node scripts/a11y-check.mjs dist/chart.html
 dg build --check   # run the checks on each build; exit 1 on violations
+dg watch --check   # same gate on every live rebuild (watch keeps running)
 ```
 
 ## GitHub Pages
