@@ -3335,3 +3335,24 @@ test('card, badge, and grid shorthand tolerate empty text fields', () => {
   assert.ok(!/>null</.test(html), 'no literal "null" leaks into a rendered text node');
 });
 
+test('chart with no data and no file binds an empty store and renders the figure', () => {
+  // A chart that omits both data (or a { csv } / { json } / { fetch } wrapper)
+  // and file is legal — the data key still resolves so the runtime renders its
+  // "No data to draw." note. The collect pass must not throw, the figure must
+  // carry the resolved dataId, and with nothing bound the inline store must be
+  // empty (the undefined value drops out of JSON.stringify).
+  const doc = {
+    title: 't',
+    sections: [{ title: 'S', content: [{ type: 'chart', kind: 'line' }] }],
+  };
+  let html;
+  assert.doesNotThrow(() => { html = renderHtml(doc); }, 'building a data-less chart does not throw');
+  assert.match(
+    html,
+    /class="dg-figure dg-chart" data-chart-type="line" data-chart-title="Chart" data-chart-data="chart-0"/,
+    'figure carries the resolved dataId from the collect pass'
+  );
+  assert.match(html, /window\.__DG_DATA__ = \{\};/, 'no bound data leaves an empty inline store');
+  assert.ok(!/data-chart-source=/.test(html), 'no fetch source wired for a chart without data');
+});
+
