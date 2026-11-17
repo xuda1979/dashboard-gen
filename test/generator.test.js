@@ -2853,6 +2853,39 @@ test('dg new fails cleanly when the template examples file is missing', () => {
   }
 });
 
+test('dg new skips copying a template fixture when the examples file is missing', () => {
+  // The fetch template binds examples/market.json as a local fixture. If that
+  // file is absent (packaged install with a pruned examples/ dir), the copy
+  // loop must skip it (continue) without failing or half-building the scaffold:
+  // the DSL, runbook, and Pages workflow still land, and the missing fixture
+  // is simply not copied.
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-missingfix-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+
+  const origExists = fs.existsSync;
+  fs.existsSync = (p) => (typeof p === 'string' && /market\.json$/.test(p)) ? false : origExists(p);
+  const origLog = console.log;
+  const origExit = process.exitCode;
+  let outMsg = '';
+  console.log = (s) => { outMsg += String(s); };
+  try {
+    cli(['new', 'fetchproj', '--template=fetch']);
+    assert.ok(!process.exitCode, 'scaffold succeeds despite the missing fixture');
+    assert.match(outMsg, /created "/);
+    assert.ok(fs.existsSync(path.join(cwd, 'fetchproj', 'dg.dsl.yaml')), 'dsl scaffolded');
+    assert.ok(fs.existsSync(path.join(cwd, 'fetchproj', '.github', 'workflows', 'pages.yml')), 'pages workflow scaffolded');
+    assert.ok(!fs.existsSync(path.join(cwd, 'fetchproj', 'market.json')), 'missing fixture skipped, not copied');
+  } finally {
+    fs.existsSync = origExists;
+    console.log = origLog;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('dg new with a bare --template/-t flag (no value) fails cleanly', () => {
   // parseArgs treats a trailing flag with no value as boolean true. A bare
   // `--template` or `-t` therefore must not silently pick a default template:
