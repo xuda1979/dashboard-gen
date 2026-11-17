@@ -2659,12 +2659,14 @@ test('quote component renders text with optional cite footer', () => {
         content: [
           { type: 'quote', text: 'Ship early, ship often.' },
           { type: 'quote', text: 'Measure twice.', cite: 'Operations Handbook' },
+          { type: 'quote' },
         ],
       },
     ],
   });
   assert.match(html, /<blockquote class="dg-quote"><p>Ship early, ship often\.<\/p><\/blockquote>/);
   assert.match(html, /<blockquote class="dg-quote"><p>Measure twice\.<\/p><footer class="dg-quote-cite">— Operations Handbook<\/footer><\/blockquote>/);
+  assert.match(html, /<blockquote class="dg-quote"><p><\/p><\/blockquote>/, 'missing text renders an empty quote body');
 });
 
 test('divider component emits a horizontal rule', () => {
