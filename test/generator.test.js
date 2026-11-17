@@ -3751,6 +3751,94 @@ test('watch stays live when a data-file rebuild fails, then rebuilds on the fix'
   }
 });
 
+test('watch drops a data-file watcher when the DSL stops binding that file', async () => {
+  // watchDataRefs rebinds data watchers after every successful build and closes
+  // watchers for refs the current DSL no longer references. A stale watcher must
+  // not keep firing '(data)' rebuilds for an unbound file (a leak that would
+  // rebuild the page when an editor touches an unrelated row file), while the
+  // DSL source watcher itself must stay live.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-drop-'));
+  const src = path.join(tmp, 'site.yaml');
+  const dataFile = path.join(tmp, 'data.json');
+  const out = path.join(tmp, 'dist', 'site.html');
+  fs.writeFileSync(dataFile, '[["Jan",5],["Feb",10]]\n');
+  fs.writeFileSync(src, [
+    'title: DataPage',
+    'sections:',
+    '  - title: Metrics',
+    '    content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: R',
+    '        file: data.json',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origExit = process.exitCode;
+  let stdout = '';
+  const origOutWrite = process.stdout.write;
+  // Tee, don't swallow (same reason as the sibling tests above).
+  process.stdout.write = (s) => { stdout += String(s); return origOutWrite.call(process.stdout, s); };
+  process.chdir(tmp);
+  let watcher;
+  const waitFor = async (fn, tries = 25) => {
+    for (let i = 0; i < tries; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (fn()) return true;
+    }
+    return false;
+  };
+  try {
+    watcher = watch(path.resolve('site.yaml'));
+    const dataBuilds = () => (stdout.match(/built site\.html \(data\)/g) || []).length;
+    const watchBuilds = () => (stdout.match(/built site\.html \(watch\)/g) || []).length;
+
+    // The binding is alive: editing the bound data file rebuilds the page.
+    await waitFor(() => stdout.includes('built site.html'));
+    const dataBefore = dataBuilds();
+    fs.writeFileSync(dataFile, '[["Jan",5],["Feb",99]]\n');
+    const dataBound = await waitFor(() => dataBuilds() > dataBefore);
+    assert.ok(dataBound, 'the bound data file triggers a rebuild');
+
+    // Drop the binding: the '(watch)' rebuild also runs watchDataRefs, which
+    // synchronously closes the now-stale data-file watcher.
+    fs.writeFileSync(src, [
+      'title: DataPage',
+      'sections:',
+      '  - title: Text',
+      '    content:',
+      '      - type: paragraph',
+      '        text: no chart anymore',
+      '',
+    ].join('\n'));
+    const dropped = await waitFor(() => watchBuilds() >= 1 && !fs.readFileSync(out, 'utf8').includes('data-chart-data='));
+    assert.ok(dropped, 'the DSL edit rebuilt the page without the chart');
+
+    // The stale watcher is gone: touching the unbound data file must not produce
+    // a '(data)' rebuild within the polling window.
+    const dataAfterDrop = dataBuilds();
+    fs.writeFileSync(dataFile, '[["Mar",1]]\n');
+    const leaked = await waitFor(() => dataBuilds() > dataAfterDrop);
+    assert.ok(!leaked, 'no rebuild for a data file the DSL no longer binds');
+
+    // False-pass guard: the source watcher is still live, so a later DSL edit
+    // triggers a normal rebuild.
+    const watchAfterDrop = watchBuilds();
+    fs.writeFileSync(src, 'title: DataPage\nsections:\n  - title: Text\n    content:\n      - type: paragraph\n        text: still watching\n');
+    const stillLive = await waitFor(() => watchBuilds() > watchAfterDrop);
+    assert.ok(stillLive, 'the source watcher stayed live after dropping the binding');
+  } finally {
+    process.stdout.write = origOutWrite;
+    if (watcher) watcher.close();
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Component coverage: paragraph, grid, quote, divider
 // ---------------------------------------------------------------------------
