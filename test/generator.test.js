@@ -202,6 +202,46 @@ test('watch mode honors DG_OUTPUT filename override', () => {
   }
 });
 
+test('watch mode ignores touches to files other than the DSL source', async () => {
+  // watch() watches the parent directory, so unrelated edits (a README, a
+  // fixture file) arrive as fs.watch events too. The callback must skip any
+  // event whose filename is neither null nor the DSL basename — otherwise a
+  // sibling-file touch triggers a wasted rebuild with stale content.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-other-'));
+  const src = path.join(tmp, 'site.yaml');
+  const out = path.join(tmp, 'dist', 'site.html');
+  fs.writeFileSync(src, 'title: v1\nsections: []\n');
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'));
+    await new Promise((r) => setTimeout(r, 250)); // initial build
+    // A sibling-file write fires a watcher event but must not rebuild the page.
+    fs.writeFileSync(path.join(tmp, 'notes.txt'), 'ignore me');
+    await new Promise((r) => setTimeout(r, 400));
+    assert.ok(
+      fs.readFileSync(out, 'utf8').includes('v1'),
+      'no rebuild happened for an unrelated file'
+    );
+    // Sanity check: the DSL itself still triggers a rebuild afterward.
+    fs.writeFileSync(src, 'title: v2\nsections: []\n');
+    let rebuilt = false;
+    for (let i = 0; i < 20; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (fs.readFileSync(out, 'utf8').includes('v2')) { rebuilt = true; break; }
+    }
+    assert.ok(rebuilt, 'DSL change still rebuilds after the ignored event');
+  } finally {
+    if (watcher) watcher.close();
+    process.chdir(origCwd);
+  }
+});
+
 test('cmdWatch restart releases the previous watcher and leaves a live one', async () => {
   // cmdWatch calls stopWatchers() before starting a fresh watch. Two watchers
   // share the same parent dir and output only differ by DG_OUTPUT, so the
