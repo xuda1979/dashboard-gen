@@ -2403,6 +2403,42 @@ test('dg new with no name scaffolds into the default "site" dir', () => {
   }
 });
 
+test('dg new scaffolds a deployable GitHub Pages workflow for any template', () => {
+  // SPEC AC #6: the generated project must be deployable to GitHub Pages, so
+  // cmdNew writes a pages.yml that (1) runs build+deploy on push to main or
+  // master and via manual dispatch, (2) grants Pages write + id-token
+  // permissions, (3) uploads the dist/ artifact and deploys it with the Pages
+  // actions, and (4) names the deployment environment so the Pages URL echoes
+  // back. The npm install/build steps alone are not enough to publish.
+  const { cmdNew } = require('../lib/cli');
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-pages-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    cmdNew({ _: ['site'], template: 'fetch' });
+    const action = fs.readFileSync(path.join(cwd, 'site', '.github', 'workflows', 'pages.yml'), 'utf8');
+    // Triggers: push to main/master and manual dispatch.
+    assert.match(action, /on:\n\s+push:\n\s+branches: \[main, master\]/);
+    assert.match(action, /workflow_dispatch:/, 'manual dispatch available');
+    // Harden the deploy job's permissions.
+    assert.match(action, /permissions:\n\s+contents: read\n\s+pages: write\n\s+id-token: write/);
+    assert.match(action, /concurrency:\n\s+group: pages\n\s+cancel-in-progress: true/);
+    // The build + Pages upload/deploy actions, with node 22 and the dist/ dir
+    // as the artifact path.
+    assert.match(action, /uses: actions\/configure-pages@v5/);
+    assert.match(action, /uses: actions\/upload-pages-artifact@v3[\s\S]*path: dist/);
+    assert.match(action, /uses: actions\/deploy-pages@v4/);
+    assert.match(action, /setup-node@v4[\s\S]*node-version: 22/);
+    assert.match(action, /npm install/);
+    assert.match(action, /npm run build/);
+    // The deployment environment exposes the published Pages URL.
+    assert.match(action, /environment:\n\s+name: github-pages[\s\S]*steps\.deployment\.outputs\.page_url/);
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 test('dg new strips a .yaml extension from the project name', () => {
   // `dg new site.yaml` must scaffold into "site/" (not a "site.yaml/" dir with
   // a dot in its name): cmdNew strips the last extension before resolving the
