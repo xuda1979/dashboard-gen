@@ -4346,6 +4346,52 @@ test('divider component emits a horizontal rule', () => {
   assert.match(html, /<hr class="dg-divider">/);
 });
 
+test('code component renders an escaped snippet with optional title and lang', () => {
+  const html = renderHtml({
+    title: 't',
+    sections: [
+      {
+        content: [
+          {
+            type: 'code',
+            title: 'Install',
+            lang: 'sh',
+            code: 'npm install -g dashboard-gen\n<hello> & "quotes"',
+          },
+        ],
+      },
+    ],
+  });
+  assert.match(html, /<div class="dg-code" role="region" aria-label="Install" data-code-lang="sh">/);
+  assert.match(html, /<span class="dg-code-title">Install<\/span>/);
+  assert.match(html, /<span class="dg-code-lang">sh<\/span>/);
+  assert.match(html, /<pre class="dg-code-pre"><code class="dg-code-body">/);
+  // content is escaped, not raw HTML
+  assert.ok(html.includes('npm install -g dashboard-gen'));
+  assert.ok(html.includes('&lt;hello&gt; &amp; &quot;quotes&quot;'));
+  assert.ok(!html.includes('<hello> & "quotes"'), 'raw markup is escaped');
+});
+
+test('code component joins a lines list and stays bare without title or lang', () => {
+  const html = renderHtml({
+    title: 't',
+    sections: [
+      {
+        content: [
+          {
+            type: 'code',
+            code: ['const x = 1;', 'console.log(x);'],
+          },
+        ],
+      },
+    ],
+  });
+  // No header, no region role, no data-lang for a bare snippet.
+  assert.match(html, /<div class="dg-code"><pre class="dg-code-pre"><code class="dg-code-body">const x = 1;\nconsole\.log\(x\);\n?<\/code><\/pre><\/div>/);
+  assert.ok(!html.includes('<div class="dg-code-header">'), 'no header without title/lang');
+  assert.ok(!html.includes('role="region"'), 'no region role without an accessible name');
+});
+
 test('table header:false treats numeric first rows as body data', () => {
   // rowsToTableData auto-detects a header for array-of-arrays only when the
   // first row is strings; `header: false` must also suppress the header for
