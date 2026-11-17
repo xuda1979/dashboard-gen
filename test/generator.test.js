@@ -2391,6 +2391,45 @@ test('serve does not crash when a file disappears after the stat, just truncates
   }
 });
 
+test('serve prints a clean diagnostic for a non-EADDRINUSE listen failure (e.g. EACCES)', async () => {
+  // Beyond the occupied-port case, server.listen can also fail with other
+  // errors - e.g. EACCES binding a privileged port as a non-root user. Both
+  // land in the same async 'error' channel; the handler's else branch must
+  // still surface the clean one-line diagnostic instead of a raw stack.
+  const { cmdServe } = require('../lib/cli');
+  const http = require('node:http');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-serve-eacces-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<h1>eacces</h1>');
+
+  // Force the listen call itself to fail with EACCES deterministically (a real
+  // privileged-port bind needs root, which the test must not assume).
+  const origListen = http.Server.prototype.listen;
+  http.Server.prototype.listen = function (...args) {
+    process.nextTick(() => this.emit('error', { code: 'EACCES' }));
+    return this;
+  };
+
+  const origExit = process.exitCode;
+  const origPort = process.env.PORT;
+  const origWrite = process.stderr.write;
+  let stderr = '';
+  process.stderr.write = (s) => { stderr += String(s); return true; };
+  try {
+    const server = cmdServe({ _: [root], port: 0 });
+    await new Promise((resolve) => server.on('error', resolve));
+    assert.match(stderr, /\[dashboard-gen\] Could not start server \(EACCES\)/, 'clean diagnostic names the errno');
+    assert.ok(!/^\s*at /m.test(stderr), 'no raw listen() stack leaks out');
+    assert.strictEqual(process.exitCode, 1, 'failing exit code set');
+  } finally {
+    process.stderr.write = origWrite;
+    http.Server.prototype.listen = origListen;
+    if (origPort === undefined) delete process.env.PORT;
+    else process.env.PORT = origPort;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+  }
+});
+
 test('serve picks the port from PORT env, the --port flag, or 4173', () => {
   const { cmdServe } = require('../lib/cli');
   const http = require('node:http');
