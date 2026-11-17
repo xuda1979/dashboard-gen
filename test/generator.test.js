@@ -1196,6 +1196,25 @@ test('duplicate section titles get deduped anchor ids shared with the auto nav',
   assert.strictEqual(new Set(ids).size, ids.length, 'section anchor ids are unique');
 });
 
+test('non-ASCII section titles fall back to an s-item slug anchor', () => {
+  // components.js slugify strips every non [a-z0-9] char; a title with no
+  // ASCII at all (e.g. an emoji-only or CJK title) yields an empty slug, and
+  // the section anchor + auto-nav must fall back to "s-item" instead of
+  // emitting a broken empty href/id.
+  const doc = {
+    title: 'i18n',
+    sections: [
+      { title: '🎉 庆祝', content: [{ type: 'paragraph', text: 'x' }] },
+      { title: '数据', content: [{ type: 'paragraph', text: 'y' }] },
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /<h2 class="dg-section-title" id="s-item">🎉 庆祝<\/h2>/);
+  assert.match(html, /<li><a class="dg-navlink" href="#s-item">🎉 庆祝<\/a><\/li>/);
+  assert.match(html, /id="s-item-2"/, 'second empty slug falls back with the dedupe suffix');
+  assert.match(html, /href="#s-item-2"/);
+});
+
 test('null section entries are skipped in nav and layout instead of crashing', () => {
   // `sections` validation only checks it is an array, so a null entry can reach
   // the render pass. collectChartData already skips null sections; renderNav and
