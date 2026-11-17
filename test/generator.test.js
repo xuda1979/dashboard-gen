@@ -2325,6 +2325,36 @@ test('bare cli and -h/--help/help all print usage without failing', () => {
   }
 });
 
+test('bin/dg entry point dispatches help and build as a subprocess', () => {
+  // The packaged CLI is the "dg" bin (package.json / README: `npx dg build`).
+  // The unit tests call cli() directly; the bin shim itself must still resolve
+  // to lib/cli and exit with a clean code on both the help path and a real
+  // build, so its wiring is pinned through the actual entry file.
+  const { execFileSync } = require('node:child_process');
+  const os = require('node:os');
+  const binDg = path.join(__dirname, '..', 'bin', 'dg');
+
+  const help = execFileSync(process.execPath, [binDg, '--help'], { encoding: 'utf8' });
+  assert.match(help, /^dashboard-gen — declarative YAML\/JSON -> static single-file page/, 'help prints usage header');
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-bin-'));
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), 'title: from-bin\nsections: []\n');
+  const stdout = execFileSync(process.execPath, [binDg, 'build', 'dg.dsl.yaml'], {
+    cwd: tmp,
+    encoding: 'utf8',
+  });
+  assert.match(stdout, /built dist\/site\.html/, 'bin build reports the output file');
+  assert.ok(fs.existsSync(path.join(tmp, 'dist', 'site.html')), 'bin build writes the page');
+  const html = fs.readFileSync(path.join(tmp, 'dist', 'site.html'), 'utf8');
+  assert.match(html, /from-bin/, 'bin build renders the DSL title');
+
+  assert.throws(
+    () => execFileSync(process.execPath, [binDg, 'build'], { cwd: fs.mkdtempSync(path.join(os.tmpdir(), 'dg-bin-empty-')), encoding: 'utf8' }),
+    (err) => err.status === 1,
+    'bin build with no DSL source exits 1'
+  );
+});
+
 test('dg new -t fetch scaffolds a project with fixture, workflow, and deps', () => {
   const { cmdNew } = require('../lib/cli');
   const os = require('node:os');
