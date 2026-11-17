@@ -4392,6 +4392,19 @@ test('code component joins a lines list and stays bare without title or lang', (
   assert.ok(!html.includes('role="region"'), 'no region role without an accessible name');
 });
 
+test('code component renders an empty body when no code is given', () => {
+  // A component with only title/lang (no code field) must fall back to an empty
+  // body instead of emitting "undefined" or crashing.
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [{ type: 'code', title: 'Usage', lang: 'js' }] }],
+  });
+  assert.match(html, /<div class="dg-code" role="region" aria-label="Usage" data-code-lang="js">/);
+  assert.match(html, /<div class="dg-code-header"><span class="dg-code-title">Usage<\/span><span class="dg-code-lang">js<\/span><\/div>/);
+  assert.match(html, /<code class="dg-code-body"><\/code>/);
+  assert.ok(!/<code class="dg-code-body">.*?undefined/.test(html), 'no literal undefined leaks into the body');
+});
+
 test('table header:false treats numeric first rows as body data', () => {
   // rowsToTableData auto-detects a header for array-of-arrays only when the
   // first row is strings; `header: false` must also suppress the header for
