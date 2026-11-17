@@ -1639,6 +1639,23 @@ test('local data file binding is resolved into the store', () => {
   assert.match(html, /window\.__DG_DATA__ = \{"chart-0":\[\{"label":"a"/);
 });
 
+test('absolute data file binding resolves without fileDir', () => {
+  // A file: path that is absolute is used as-is — fileDir is ignored — so a
+  // temp fixture outside the DSL directory still binds into the store.
+  const tmp = path.join(ExampleTmp(), 'abs');
+  const dir = path.join(tmp, 'data');
+  fs.mkdirSync(dir, { recursive: true });
+  const absPath = path.join(dir, 'abs.json');
+  fs.writeFileSync(absPath, JSON.stringify([{ label: 'abs', series: { v: 7 } }]));
+  const doc = {
+    title: 't',
+    sections: [{ content: [{ type: 'chart', kind: 'line', file: absPath }] }],
+  };
+  // fileDir points nowhere in particular; the absolute binding must win.
+  const html = renderHtml(doc, { fileDir: path.join(tmp, 'nowhere') });
+  assert.match(html, /window\.__DG_DATA__ = \{"chart-0":\[\{"label":"abs"/);
+});
+
 test('CSV data file binding is parsed into rows at build time', () => {
   const tmp = path.join(ExampleTmp(), 'csv');
   const fileDir = path.join(tmp, 'fixtures');
