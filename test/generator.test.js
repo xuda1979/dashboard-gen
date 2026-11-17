@@ -2391,6 +2391,48 @@ test('serve does not crash when a file disappears after the stat, just truncates
   }
 });
 
+test('serve rejects path traversal with 403 and still serves normal and dot-prefixed files', async () => {
+  // The serve handler guards against escaping the served tree two ways: a raw
+  // request that contains a ".." segment (or the %2e%2e percent-encoding) is
+  // rejected before any URL normalization, and the decoded path must resolve
+  // inside the served dir. Global fetch() normalizes ".." away before sending,
+  // so these hit the raw-path regex via http.request, which sends the path
+  // verbatim. A dot-prefixed basename like "..nope.html" must NOT be caught by
+  // the ".." regex (it requires a following slash or end-of-path).
+  const { cmdServe } = require('../lib/cli');
+  const http = require('node:http');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-serve-trav-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<h1>ok</h1>');
+  fs.writeFileSync(path.join(root, 'secret.html'), '<h1>secret</h1>');
+  fs.writeFileSync(path.join(root, '..nope.html'), '<h1>dot-prefixed</h1>');
+
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let server;
+  try {
+    server = cmdServe({ _: [root], port: 0 });
+    while (!server.address()) await wait(5);
+    const port = server.address().port;
+    const status = (hitPath) => new Promise((resolve, reject) => {
+      const req = http.request({ host: '127.0.0.1', port, path: hitPath }, (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode));
+      });
+      req.on('error', reject);
+      req.end();
+    });
+
+    assert.strictEqual(await status('/index.html'), 200, 'normal file still serves');
+    assert.strictEqual(await status('/../secret.html'), 403, 'raw .. segment rejected');
+    assert.strictEqual(await status('/..%2fsecret.html'), 403, 'mixed .. + encoded slash rejected');
+    assert.strictEqual(await status('/%2e%2e/secret.html'), 403, 'percent-encoded .. rejected');
+    assert.strictEqual(await status('/%2e%2e%2fsecret.html'), 403, 'fully encoded ../ rejected');
+    assert.strictEqual(await status('/..nope.html'), 200, 'dot-prefixed basename is not traversal');
+  } finally {
+    if (server) server.close();
+  }
+});
+
 test('serve prints a clean diagnostic for a non-EADDRINUSE listen failure (e.g. EACCES)', async () => {
   // Beyond the occupied-port case, server.listen can also fail with other
   // errors - e.g. EACCES binding a privileged port as a non-root user. Both
