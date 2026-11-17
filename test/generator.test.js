@@ -1975,6 +1975,28 @@ test('bad JSON raises ParseError', () => {
   );
 });
 
+test('parseDsl without a filename falls back to "." in parse-error locations', () => {
+  // parseDsl is exported for direct in-memory use (watch mode re-parses the DSL
+  // source); a caller that passes no filename must still get a ParseError whose
+  // location reads "." rather than "undefined" in the formatted message.
+  const { parseDsl } = require('../lib/loader');
+  const cases = [
+    { source: '{ "title": ', desc: 'JSON' },
+    { source: 'title: [unclosed\n  sections:\n  - {', desc: 'YAML' },
+  ];
+  for (const { source, desc } of cases) {
+    assert.throws(
+      () => parseDsl(source),
+      (err) => {
+        assert.strictEqual(err.name, 'ParseError', `${desc} raises ParseError`);
+        assert.strictEqual(err.path, '.', `${desc} location falls back to "."`);
+        assert.ok(err.format().endsWith('\n  at: .'), `${desc} formats the fallback location`);
+        return true;
+      }
+    );
+  }
+});
+
 test('YAML flow-style DSL starting with { or [ parses as YAML, not JSON', () => {
   // A "{"- or "["-leading document is ambiguous: it could be JSON or YAML
   // flow style ({title: t}). detectSpec guesses JSON; when JSON.parse fails the
