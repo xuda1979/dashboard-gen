@@ -363,6 +363,113 @@ test('watch recovers when the DSL is fixed after a failed initial build', async 
   }
 });
 
+test('dg watch --check lints the initial build and passes on a compliant page', () => {
+  // watch --check folds the same lib/a11y.js gate as build --check into the
+  // watch loop: the very first (synchronous) build is linted too, and a page
+  // that satisfies the invariants leaves the exit code untouched.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-check-ok-'));
+  const src = path.join(tmp, 'site.yaml');
+  const out = path.join(tmp, 'dist', 'site.html');
+  fs.writeFileSync(src, [
+    'title: t',
+    'sections:',
+    '  - title: S',
+    '    content:',
+    '      - type: paragraph',
+    '        text: hi',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origExit = process.exitCode;
+  let stdout = '';
+  const origOutWrite = process.stdout.write;
+  // Tee, don't swallow: the test runner emits sibling-test results to stdout
+  // asynchronously; dropping the write would eat those deferred emissions.
+  process.stdout.write = (s) => { stdout += String(s); return origOutWrite.call(process.stdout, s); };
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'), { check: true });
+    assert.match(stdout, /a11y-check OK/, 'compliant page passes the gate on the initial build');
+    assert.ok(fs.existsSync(out), 'page built');
+    assert.strictEqual(process.exitCode, origExit, 'compliant page leaves the exit code unchanged');
+  } finally {
+    process.stdout.write = origOutWrite;
+    if (watcher) watcher.close();
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
+test('dg watch --check flags a violating rebuild but stays live and re-lints on the fix', async () => {
+  // The a11y gate is not just a one-shot: a page that violates a hard invariant
+  // (contrast here) is still written to dist but --check reports the violation
+  // and sets exit code 1, leaving the watcher running; fixing the theme rebuilds
+  // on the SAME watcher and re-lints to OK.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-check-fail-'));
+  const src = path.join(tmp, 'site.yaml');
+  const out = path.join(tmp, 'dist', 'site.html');
+  fs.writeFileSync(src, [
+    'title: t',
+    'theme:',
+    '  pageBg: "#ffffff"',
+    '  textColor: "#f5f5f5"',
+    'sections:',
+    '  - title: S',
+    '    content:',
+    '      - type: paragraph',
+    '        text: hi',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origExit = process.exitCode;
+  let stdout = '';
+  const origOutWrite = process.stdout.write;
+  // Tee, don't swallow (same reason as the sibling test above).
+  process.stdout.write = (s) => { stdout += String(s); return origOutWrite.call(process.stdout, s); };
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'), { check: true });
+    assert.ok(fs.existsSync(out), 'page still written before the check fails');
+    assert.match(stdout, /a11y-check FAIL/, 'violating page fails the gate');
+    assert.strictEqual(process.exitCode, 1, 'a11y violation on the initial build sets exit code 1');
+
+    // Fix the theme; the same watcher must still be live and re-lint the rebuilt
+    // page to OK (mirrors the failed-rebuild recovery contract for the gate).
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    fs.writeFileSync(src, [
+      'title: t',
+      'sections:',
+      '  - title: S',
+      '    content:',
+      '      - type: paragraph',
+      '        text: hi',
+      '',
+    ].join('\n'));
+    let passed = false;
+    for (let i = 0; i < 50; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (stdout.includes('a11y-check OK')) { passed = true; break; }
+    }
+    assert.ok(passed, 'watcher re-linted to OK after the violation was fixed');
+    assert.strictEqual(process.exitCode, origExit === undefined ? 0 : origExit, 'rebuilt page clears the failure exit code');
+  } finally {
+    process.stdout.write = origOutWrite;
+    if (watcher) watcher.close();
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('dg watch exits cleanly with code 0 on SIGINT', async () => {
   // The watch loop registers a SIGINT handler that closes the watcher and
   // exits 0; without it Ctrl-C would kill the process with the default signal
