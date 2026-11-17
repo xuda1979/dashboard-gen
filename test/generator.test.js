@@ -2350,6 +2350,47 @@ test('serve prints a clean diagnostic, not a stack, when the port is occupied', 
   }
 });
 
+test('serve does not crash when a file disappears after the stat, just truncates that response', async () => {
+  // createReadStream spills an open/read failure (file removed or unreadable
+  // between fs.stat and the open) as an async 'error' event. With no listener
+  // that is an uncaught exception: raw "node:events:N throw er" stack dump and
+  // the whole serve process dies (same async class as the EADDRINUSE listen
+  // failure). The served process must survive and other requests keep working.
+  const { cmdServe } = require('../lib/cli');
+  const http = require('node:http');
+  const os = require('node:os');
+  const { PassThrough } = require('node:stream');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-serve-strm-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<h1>ok</h1>');
+  fs.writeFileSync(path.join(root, 'gone.html'), '<h1>gone</h1>');
+
+  const origCS = fs.createReadStream;
+  fs.createReadStream = (p, ...args) => {
+    if (String(p).endsWith('gone.html')) {
+      const s = new PassThrough();
+      setImmediate(() => s.emit('error', { code: 'ENOENT' }));
+      return s;
+    }
+    return origCS(p, ...args);
+  };
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  let server;
+  try {
+    server = cmdServe({ _: [root], port: 0 });
+    while (!server.address()) await wait(5);
+    const port = server.address().port;
+    const base = `http://127.0.0.1:${port}`;
+    assert.strictEqual((await fetch(`${base}/index.html`)).status, 200, 'normal file still serves');
+    await fetch(`${base}/gone.html`).catch(() => {});
+    await wait(25);
+    // The process must NOT have crashed: a follow-up request still succeeds.
+    assert.strictEqual((await fetch(`${base}/index.html`)).status, 200, 'serve survives a mid-stream file error');
+  } finally {
+    fs.createReadStream = origCS;
+    if (server) server.close();
+  }
+});
+
 test('serve picks the port from PORT env, the --port flag, or 4173', () => {
   const { cmdServe } = require('../lib/cli');
   const http = require('node:http');
