@@ -26,7 +26,7 @@ CLI commands:
 | ------------------ | --------------------------------------------------- |
 | `dg new <name>`    | Bootstrap a project with a template + Pages action  |
 | `dg build [src]`   | Render DSL → `dist/<name>.html`                     |
-| `dg watch [src]`   | Build, then rebuild whenever the DSL changes        |
+| `dg watch [src]`   | Build, then rebuild when the DSL (or a bound data file/fixture) changes |
 | `dg serve [dir]`   | Static server for `dist/` at `localhost:4173`       |
 
 ## Page model (the DSL)
@@ -102,6 +102,9 @@ Charts bind rows two ways:
 3. **Fetch (read-only)** — `data: { fetch: market.json }` loads the JSON at
    page-open time. Serve the fixture next to the page; for remote URLs the
    host must allow CORS. `self://<path>` is treated as a local relative path.
+
+`dg watch` follows `file:` bindings and local fetch fixtures too, so editing
+chart data rebuilds the page without touching the DSL.
 
 ## Accessibility
 

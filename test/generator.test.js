@@ -3312,6 +3312,100 @@ test('fixture-copy walk skips null section entries past which fixtures still cop
 });
 
 // ---------------------------------------------------------------------------
+// Watch rebuilds on bound data changes (chart file: bindings + local fetch
+// fixtures live outside the DSL and are edited independently of it)
+// ---------------------------------------------------------------------------
+
+test('watch rebuilds when a chart file-binding data file changes', async () => {
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-data-'));
+  const src = path.join(tmp, 'site.yaml');
+  const dataFile = path.join(tmp, 'data.json');
+  const out = path.join(tmp, 'dist', 'site.html');
+  fs.writeFileSync(dataFile, '[["Jan",5],["Feb",10]]\n');
+  fs.writeFileSync(src, [
+    'title: DataPage',
+    'sections:',
+    '  - title: Metrics',
+    '    content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: R',
+    '        file: data.json',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'));
+    await new Promise((r) => setTimeout(r, 250)); // initial build
+    fs.writeFileSync(dataFile, '[["Jan",5],["Feb",99]]\n');
+    let rebuilt = false;
+    for (let i = 0; i < 25; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (fs.readFileSync(out, 'utf8').includes('99')) { rebuilt = true; break; }
+    }
+    assert.ok(rebuilt, 'watch rebuilt when the bound data file changed');
+  } finally {
+    if (watcher) watcher.close();
+    process.chdir(origCwd);
+  }
+});
+
+test('watch rebuilds when a local fetch fixture changes', async () => {
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-fetch-'));
+  const src = path.join(tmp, 'site.yaml');
+  const fixture = path.join(tmp, 'market.json');
+  const out = path.join(tmp, 'dist', 'site.html');
+  fs.writeFileSync(fixture, '[[1],[2]]\n');
+  fs.writeFileSync(src, [
+    'title: FetchPage',
+    'sections:',
+    '  - title: M',
+    '    content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: R',
+    '        data: { fetch: "market.json" }',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'));
+    await new Promise((r) => setTimeout(r, 250)); // initial build
+    // The fixture is copied next to the output by the build; rewriting the
+    // source fixture must re-copy it and rebuild the manifest.
+    fs.writeFileSync(fixture, '[[1],[7]]\n');
+    let rebuilt = false;
+    for (let i = 0; i < 25; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (fs.readFileSync(path.join(tmp, 'dist', 'market.json'), 'utf8').includes('7')) {
+        rebuilt = true;
+        break;
+      }
+    }
+    assert.ok(rebuilt, 'watch re-copied and rebuilt when the local fixture changed');
+    assert.ok(
+      fs.readFileSync(out, 'utf8').includes('market.json'),
+      'the rebuilt page still carries the fetch manifest URL'
+    );
+  } finally {
+    if (watcher) watcher.close();
+    process.chdir(origCwd);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Component coverage: paragraph, grid, quote, divider
 // ---------------------------------------------------------------------------
 
