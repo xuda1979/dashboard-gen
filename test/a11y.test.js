@@ -243,3 +243,58 @@ test('a11y-check warns (not fails) on heading skips, external assets, and non-he
   assert.strictEqual(resNamed.ok, true, 'named-color theme tokens pass the lint');
   assert.match(resNamed.stdout, /tokens not hex \(page-bg=white text-color=black\)/, 'reports the unmeasurable pair');
 });
+
+test('a11y-check linearizes a black channel with the low-value luminance branch', () => {
+  // Luminance linearizes channels <= 0.04045 via c / 12.92 (0/255 for #000000)
+  // and everything brighter via the gamma curve; only the gamma side has run in
+  // practice because every earlier test palette channel exceeds 10/255. A black
+  // token exercises the dark side and still measures exactly 21:1 on white.
+  const src =
+    'title: t\n' +
+    'theme:\n' +
+    '  pageBg: "#000000"\n' +
+    '  textColor: "#ffffff"\n' +
+    'sections:\n' +
+    '  - title: S\n' +
+    '    content:\n' +
+    '      - type: paragraph\n' +
+    '        text: hi\n';
+  const html = buildFromSource(src, 'black-theme.yaml');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-black-'));
+  const file = path.join(tmp, 'black.html');
+  fs.writeFileSync(file, html);
+  const res = runCheck(file);
+  assert.strictEqual(res.ok, true, 'black-on-white passes AA');
+  assert.match(res.stdout, /contrast \(light\): 21\.00:1/, 'measures the exact 21:1 black/white ratio');
+  assert.match(res.stdout, /passes AA \(4\.5:1\)/, 'reports the compliant ratio');
+});
+
+test('a11y-check skips contrast when a palette carries no matching color token', () => {
+  // The tool lints arbitrary HTML, not only generator output: an input that
+  // declares --page-bg but no --text-color (or vice versa) must skip that
+  // palette's contrast check entirely instead of reading undefined and failing
+  // or fabricating a ratio. The page stays OK with no contrast note.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-notoken-'));
+  const file = path.join(tmp, 'notoken.html');
+  fs.writeFileSync(
+    file,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title>
+<style>
+  :root { --page-bg: #ffffff; }
+</style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main"><h2>Top</h2></main>
+</body>
+</html>`
+  );
+  const res = runCheck(file);
+  assert.strictEqual(res.ok, true, 'page without a text-color token still passes');
+  assert.match(res.stdout, /\[a11y-check\] OK/, 'reports OK');
+  assert.ok(!/contrast \(/.test(res.stdout), 'no contrast note when a token is missing');
+  assert.match(res.stdout, /heading levels used: 2/, 'the checks after contrast still run');
+});
