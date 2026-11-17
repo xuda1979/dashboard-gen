@@ -2633,6 +2633,44 @@ test('serve rejects path traversal with 403 and still serves normal and dot-pref
   }
 });
 
+test('serve prints a clean diagnostic for a listen failure that carries no errno code', async () => {
+  // The handler's else branch formats the error as `(err && err.code) || err`,
+  // which must also survive a listen 'error' that has no `.code` property
+  // (fs errors have one, but failed binds can surface other raw Error shapes).
+  // The fallback must name the error object itself, still without leaking a
+  // raw listen() stack.
+  const { cmdServe } = require('../lib/cli');
+  const http = require('node:http');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-serve-nocode-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<h1>nocode</h1>');
+
+  const origListen = http.Server.prototype.listen;
+  http.Server.prototype.listen = function (...args) {
+    process.nextTick(() => this.emit('error', new Error('bogus bind error')));
+    return this;
+  };
+
+  const origExit = process.exitCode;
+  const origPort = process.env.PORT;
+  const origWrite = process.stderr.write;
+  let stderr = '';
+  process.stderr.write = (s) => { stderr += String(s); return true; };
+  try {
+    const server = cmdServe({ _: [root], port: 0 });
+    await new Promise((resolve) => server.on('error', resolve));
+    assert.match(stderr, /\[dashboard-gen\] Could not start server \(Error: bogus bind error\)/, 'fallback names the error object itself');
+    assert.ok(!/^\s*at /m.test(stderr), 'no raw listen() stack leaks out');
+    assert.strictEqual(process.exitCode, 1, 'failing exit code set');
+  } finally {
+    process.stderr.write = origWrite;
+    http.Server.prototype.listen = origListen;
+    if (origPort === undefined) delete process.env.PORT;
+    else process.env.PORT = origPort;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+  }
+});
+
 test('serve prints a clean diagnostic for a non-EADDRINUSE listen failure (e.g. EACCES)', async () => {
   // Beyond the occupied-port case, server.listen can also fail with other
   // errors - e.g. EACCES binding a privileged port as a non-root user. Both
