@@ -80,6 +80,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `headline`   | `text`, `level` (1-6), `id`                             |
 | `paragraph`  | `text` (or `{text, href}` inline-link form)             |
 | `list`       | `items[]`, `ordered`                                    |
+| `steps`      | `items[]` (numbered procedure list)                     |
 | `button`     | `text`, `href`, `style` (primary/secondary/subtle/danger), `newtab` |
 | `link`       | `text`/`label`, `href`, `style` (`button`), `newtab`    |
 | `card`       | `title`, `text`, `intent` (primary/success/danger/warning) |

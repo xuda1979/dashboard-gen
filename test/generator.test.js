@@ -42,9 +42,13 @@ test('dashboard runbook section exercises the remaining component library', () =
   assert.match(html, /<div class="dg-callout dg-callout--warning" role="note" aria-label="Incident playbook">/);
   assert.match(html, /<div class="dg-callout-title">Incident playbook<\/div>/);
   assert.match(html, /<p class="dg-callout-body">Follow the ordered steps below/);
-  assert.match(html, /<ul class="dg-ul"><li>Assess blast radius and page the on-call engineer\.<\/li>/);
+  assert.match(
+    html,
+    /<ol class="dg-steps"><li class="dg-steps-item"><span class="dg-steps-num">1<\/span><span class="dg-steps-text">Assess blast radius and page the on-call engineer\.<\/span><\/li>/,
+    'runbook renders a numbered steps list'
+  );
   const runbook = html.match(/<h2 class="dg-section-title" id="s-runbook">[\s\S]*$/)[0];
-  assert.strictEqual((runbook.match(/<li>/g) || []).length, 4, 'runbook lists four steps');
+  assert.strictEqual((runbook.match(/dg-steps-item/g) || []).length, 4, 'runbook has four numbered steps');
   assert.match(html, /<hr class="dg-divider">/);
   assert.match(html, /<blockquote class="dg-quote"><p>Production is the least interesting environment/);
   assert.match(html, /<footer class="dg-quote-cite">— Ops Handbook<\/footer>/);
@@ -1262,6 +1266,34 @@ test('list and grid guard against missing items arrays', () => {
   });
   assert.match(html, /<ul class="dg-ul"><\/ul>/);
   assert.match(html, /<div class="dg-grid" style="grid-template-columns: repeat\(auto-fill, minmax\(220px, 1fr\)\);" data-grid-cols="3">\n\n<\/div>/);
+});
+
+test('steps component renders a numbered procedure list with chips', () => {
+  const html = renderHtml({
+    title: 'runbook',
+    sections: [{
+      content: [{ type: 'steps', items: ['Assess blast radius.', 'Freeze deploys.'] }],
+    }],
+  });
+  assert.match(
+    html,
+    /<ol class="dg-steps"><li class="dg-steps-item"><span class="dg-steps-num">1<\/span><span class="dg-steps-text">Assess blast radius\.<\/span><\/li><li class="dg-steps-item"><span class="dg-steps-num">2<\/span><span class="dg-steps-text">Freeze deploys\.<\/span><\/li><\/ol>/,
+    'each item carries an explicit step number and its text'
+  );
+});
+
+test('steps escapes item text and guards against a missing items array', () => {
+  const html = renderHtml({
+    title: 'runbook',
+    sections: [{
+      content: [
+        { type: 'steps', items: ['Stage files: <src>/app.js & co'] },
+        { type: 'steps' },
+      ],
+    }],
+  });
+  assert.match(html, /<span class="dg-steps-text">Stage files: &lt;src&gt;\/app\.js &amp; co<\/span>/);
+  assert.match(html, /<ol class="dg-steps"><\/ol>/, 'missing items yields an empty list container');
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {

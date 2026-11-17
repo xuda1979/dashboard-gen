@@ -105,7 +105,7 @@ sections:
         title: Incident playbook
         text: Follow the ordered steps below — never skip the rollback check before announcing an incident.
 
-      - type: list
+      - type: steps
         items:
           - Assess blast radius and page the on-call engineer.
           - Freeze deploys and record the current release hash.
