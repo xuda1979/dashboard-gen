@@ -1794,6 +1794,31 @@ test('absolute data file binding resolves without fileDir', () => {
   assert.match(html, /window\.__DG_DATA__ = \{"chart-0":\[\{"label":"abs"/);
 });
 
+test('relative data file binding falls back to the cwd without fileDir', () => {
+  // With no fileDir option the relative file path joins against '.' — the
+  // process cwd — so a fixture next to the current directory still binds
+  // (mirrors the absolute path treating fileDir as optional).
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-rel-filedir-'));
+  fs.writeFileSync(path.join(tmp, 'data.json'), JSON.stringify([{ label: 'cwd', series: { v: 5 } }]));
+  const doc = {
+    title: 't',
+    sections: [{ content: [{ type: 'chart', kind: 'line', file: 'data.json' }] }],
+  };
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    const html = renderHtml(doc); // no fileDir option at all
+    assert.match(
+      html,
+      /window\.__DG_DATA__ = \{"chart-0":\[\{"label":"cwd","series":\{"v":5\}\}\]\}/,
+      'relative binding resolves against the cwd and binds the rows'
+    );
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 test('CSV data file binding is parsed into rows at build time', () => {
   const tmp = path.join(ExampleTmp(), 'csv');
   const fileDir = path.join(tmp, 'fixtures');
