@@ -2312,6 +2312,44 @@ test('serve rejects an invalid port with a clean error, not a raw listen() stack
   }
 });
 
+test('serve prints a clean diagnostic, not a stack, when the port is occupied', async () => {
+  // server.listen fires an async unhandled 'error' event (EADDRINUSE) that
+  // bypasses the dispatch try/catch; without an explicit error listener dg serve
+  // on a busy port crashed with a raw "node:events:497 throw er" stack dump.
+  const { cmdServe } = require('../lib/cli');
+  const http = require('node:http');
+  const os = require('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-serve-busy-'));
+  fs.writeFileSync(path.join(root, 'index.html'), '<h1>busy</h1>');
+
+  // Occupy a real port first so cmdServe's listen cannot bind it.
+  const blocker = http.createServer((req, res) => { res.end('occupied'); });
+  await new Promise((resolve) => blocker.listen(0, '127.0.0.1', resolve));
+  const usedPort = blocker.address().port;
+
+  const origExit = process.exitCode;
+  const origPort = process.env.PORT;
+  const origWrite = process.stderr.write;
+  let stderr = '';
+  process.stderr.write = (s) => { stderr += String(s); return true; };
+  try {
+    const server = cmdServe({ _: [root], port: usedPort });
+    // The EADDRINUSE 'error' event fires asynchronously from server.listen;
+    // a second listener here both awaits that emission and proves the event is
+    // handled (a listener is what prevents the uncaught-exception crash).
+    await new Promise((resolve) => server.on('error', resolve));
+    assert.match(stderr, /\[dashboard-gen\] Port \d+ already in use\./, 'clean diagnostic reports the busy port');
+    assert.ok(!/^\s*at /m.test(stderr), 'no raw listen() stack leaks out');
+    assert.strictEqual(process.exitCode, 1, 'failing exit code set');
+  } finally {
+    process.stderr.write = origWrite;
+    if (origPort === undefined) delete process.env.PORT;
+    else process.env.PORT = origPort;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    blocker.close();
+  }
+});
+
 test('serve picks the port from PORT env, the --port flag, or 4173', () => {
   const { cmdServe } = require('../lib/cli');
   const http = require('node:http');
