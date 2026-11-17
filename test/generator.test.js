@@ -961,6 +961,37 @@ test('grid layout renders sections as auto-fit columns', () => {
   assert.strictEqual(items.length, 3);
 });
 
+test('layouts render hollow cells for sections with no widget content', () => {
+  // A section may carry only a nav/hero widget or nothing at all. Every layout
+  // falls back to an empty cell (never "null" text or a crash): grid items,
+  // sidebar columns, and default stacked sections stay empty while hero-sub
+  // still renders for hero-only sections.
+  const grid = renderHtml({
+    title: 'g', layout: 'grid',
+    sections: [{ content: [{ type: 'card', title: 'A', text: 'x' }] }, {}],
+  });
+  assert.match(grid, /<div class="dg-layout-grid-item"><div class="dg-card">/);
+  assert.match(grid, /<div class="dg-layout-grid-item"><\/div>/, 'empty section -> hollow grid item');
+
+  const sidebar = renderHtml({
+    title: 's', layout: 'sidebar',
+    sections: [
+      { nav: [{ type: 'link', text: 'Docs', href: '#d' }] }, // no content on the first column
+      { title: 'Empty' },                                    // no widget at all
+    ],
+  });
+  assert.match(sidebar, /<aside class="dg-sidebar" aria-label="Sidebar">[\s\S]*Docs/);
+  assert.match(sidebar, /<h2 class="dg-section-title" id="s-empty">Empty<\/h2>\n<\/div>/,
+    'sidebar column without content stays empty after its title');
+
+  const landing = renderHtml({
+    title: 'd',
+    sections: [{ hero: [{ type: 'headline', level: 2, text: 'SubHero' }] }, {}],
+  });
+  assert.match(landing, /<section class="dg-section"><div class="dg-hero dg-hero-sub"><h2 class="dg-headline dg-h2">SubHero<\/h2><\/div><\/section>/);
+  assert.match(landing, /<section class="dg-section"><\/section>/, 'empty section -> hollow stacked section');
+});
+
 test('grid component honors columns as a fixed layout and defaults to auto-fill', () => {
   const doc = {
     title: 'grid-comp',
