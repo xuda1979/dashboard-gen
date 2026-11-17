@@ -858,6 +858,23 @@ test('headline id and list ordered render their documented fields', () => {
   assert.match(html, /<ul class="dg-ul"><li>x<\/li><li>y<\/li><\/ul>/);
 });
 
+test('list and grid guard against missing items arrays', () => {
+  // README: list takes `items[]` and grid takes `items[]`. Both are optional —
+  // a missing or non-array value renders the empty container instead of
+  // throwing (matching the paragraph/quote optional-text handling).
+  const html = renderHtml({
+    title: 'empty-collections',
+    sections: [{
+      content: [
+        { type: 'list' },
+        { type: 'grid' },
+      ],
+    }],
+  });
+  assert.match(html, /<ul class="dg-ul"><\/ul>/);
+  assert.match(html, /<div class="dg-grid" style="grid-template-columns: repeat\(auto-fill, minmax\(220px, 1fr\)\);" data-grid-cols="3">\n\n<\/div>/);
+});
+
 test('fallbacks: card title object, headline level, badge tone', () => {
   // card `title` may be { text }; headline `level` outside 1-6 falls back to
   // h2; badge `tone` unknown falls back to neutral.
