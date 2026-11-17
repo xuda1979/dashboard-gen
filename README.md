@@ -124,8 +124,9 @@ dg build --check   # run the checks on each build; exit 1 on violations
 Repo-level workflow at `.github/workflows/pages.yml` builds every example
 into `dist/` (with the landing page copied to `dist/index.html` so the Pages
 root shows it) and deploys. Projects scaffolded by `dg new` get their own copy
-that builds that DSL into `dist/index.html`. Enable Pages → *GitHub Actions*
-in the repo settings.
+that builds that DSL into `dist/index.html`. Both gates on `dg build --check`,
+so a page that fails the a11y invariants is not deployed. Enable Pages →
+*GitHub Actions* in the repo settings.
 
 ## Development
 

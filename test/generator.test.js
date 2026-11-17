@@ -2769,7 +2769,7 @@ test('dg new -t fetch scaffolds a project with fixture, workflow, and deps', () 
     assert.ok(fs.existsSync(path.join(cwd, 'demo', 'market.json')), 'fetch fixture copied');
     assert.ok(fs.existsSync(path.join(cwd, 'demo', '.github', 'workflows', 'pages.yml')));
     const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'demo', 'package.json'), 'utf8'));
-    assert.match(pkg.scripts.build, /dg build dg\.dsl\.yaml/);
+    assert.match(pkg.scripts.build, /dg build dg\.dsl\.yaml --check/, 'build lints for a11y');
     assert.match(pkg.scripts.build, /dist\/site\.html/);
     assert.ok(pkg.dependencies && pkg.dependencies['dashboard-gen'], 'scaffold depends on dashboard-gen');
     const action = fs.readFileSync(path.join(cwd, 'demo', '.github', 'workflows', 'pages.yml'), 'utf8');
@@ -3775,7 +3775,7 @@ test('repo-level Pages workflow builds every example and copies landing to index
   // The build loop: iterate every example DSL and emit it into dist/.
   assert.match(wf, /mkdir -p dist/);
   assert.match(wf, /for f in examples\/\*\.yaml; do/);
-  assert.match(wf, /npx dg build "\$f"/);
+  assert.match(wf, /npx dg build "\$f" --check/, 'deploys gate on a11y checks');
   // The landing page becomes the Pages root index (dg build landing.yaml ->
   // dist/landing.html, matching siteNameFrom's basename derivation).
   assert.match(wf, /cp dist\/landing\.html dist\/index\.html/);
