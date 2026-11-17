@@ -2687,6 +2687,43 @@ test('grid component honors columns and columnWidth inline styles', () => {
   assert.match(html, /<div class="dg-cell">just text<\/div>/);
 });
 
+test('headline null text renders an empty heading body', () => {
+  // normalizeText maps null/undefined to '' so a headline with an explicit
+  // null text still renders a well-formed heading instead of "null".
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [{ type: 'headline', level: 2, text: null }] }],
+  });
+  assert.match(html, /<h2 class="dg-headline dg-h2"><\/h2>/);
+});
+
+test('list maps null items to empty cells instead of "null" text', () => {
+  // items pass through normalizeText (null/undefined -> ''), so a sparse
+  // items list renders empty cells, not the literal word "null".
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [{ type: 'list', items: ['a', null, 'b'] }] }],
+  });
+  assert.match(html, /<ul class="dg-ul"><li>a<\/li><li><\/li><li>b<\/li><\/ul>/);
+});
+
+test('table object rows keep scalar rows as repeated raw cells', () => {
+  // Object-row tables align to the union-of-keys header; a scalar row (not an
+  // object) cannot be keyed, so each cell repeats the raw scalar value rather
+  // than crashing or dropping the row.
+  const html = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{ type: 'table', rows: [{ name: 'api', v: 2 }, 'scalar-row'] }],
+    }],
+  });
+  assert.match(
+    html,
+    /<tbody><tr><td>api<\/td><td>2<\/td><\/tr><tr><td>scalar-row<\/td><td>scalar-row<\/td><\/tr><\/tbody>/,
+    'scalar row repeats its value across the union columns'
+  );
+});
+
 test('grid component defaults to auto-fill with a columnWidth minimum', () => {
   const html = renderHtml({
     title: 't',
