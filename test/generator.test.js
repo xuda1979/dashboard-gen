@@ -2952,6 +2952,47 @@ test('build mirrors a fixture directory containing nested subdirectories', () =>
   }
 });
 
+test('fixture-copy walk skips null section entries past which fixtures still copy', () => {
+  // copyLocalFixtures walks the doc with collectFetchSpecs (render.js), whose
+  // visit() guard skips null / non-object entries before recursing. A null
+  // section (validated only as an array, pinned by the render-path test) must
+  // not crash the CLI fixture copy; a sibling section's fetch fixture must
+  // still be copied next to the output.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-fixture-null-'));
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'market.json'), '[]');
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), [
+    'title: t',
+    'sections:',
+    '  - null',
+    '  - content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: A',
+    '        data: { fetch: "market.json" }',
+    '',
+  ].join('\n'));
+
+  const { cmdBuild } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    cmdBuild({ _: ['dg.dsl.yaml'] });
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'market.json')),
+      'fixture copied despite a null section entry before it'
+    );
+    const html = fs.readFileSync(path.join(tmp, 'dist', 'site.html'), 'utf8');
+    assert.ok(
+      html.includes('"url":"market.json"'),
+      'runtime fetch after the null section kept its manifest URL'
+    );
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Component coverage: paragraph, grid, quote, divider
 // ---------------------------------------------------------------------------
