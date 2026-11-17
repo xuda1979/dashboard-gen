@@ -4405,6 +4405,50 @@ test('code component renders an empty body when no code is given', () => {
   assert.ok(!/<code class="dg-code-body">.*?undefined/.test(html), 'no literal undefined leaks into the body');
 });
 
+test('callout component renders a tone-styled notice with a labelled title', () => {
+  const html = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{ type: 'callout', tone: 'warning', title: 'Maintenance', text: 'Scheduled at 02:00 UTC.' }],
+    }],
+  });
+  assert.match(html, /<div class="dg-callout dg-callout--warning" role="note" aria-label="Maintenance">/);
+  assert.match(html, /<div class="dg-callout-title">Maintenance<\/div>/);
+  assert.match(html, /<p class="dg-callout-body">Scheduled at 02:00 UTC\.<\/p>/);
+});
+
+test('callout component defaults to primary tone and stays bare without title', () => {
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [{ type: 'callout', text: 'Tip: pin deps.' }] }],
+  });
+  // No title -> no note role (the role needs an accessible name), no header.
+  assert.match(html, /<div class="dg-callout dg-callout--primary"><p class="dg-callout-body">Tip: pin deps\.<\/p><\/div>/);
+  assert.ok(!html.includes('role="note"'), 'no note role without an accessible name');
+  assert.ok(!html.includes('<div class="dg-callout-title">'), 'no title header when title is absent');
+});
+
+test('callout component escapes body and title markup', () => {
+  const html = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{ type: 'callout', title: 'A <b>bold</b> title', text: '<script>alert(1)</script> & co' }],
+    }],
+  });
+  assert.ok(html.includes('A &lt;b&gt;bold&lt;/b&gt; title'), 'title is escaped');
+  assert.ok(html.includes('&lt;script&gt;alert(1)&lt;/script&gt; &amp; co'), 'body is escaped');
+  assert.ok(!html.includes('<script>alert(1)</script>'), 'raw script never reaches the page');
+});
+
+test('callout component renders an empty body when no text is given', () => {
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [{ type: 'callout', title: 'Heads up' }] }],
+  });
+  assert.match(html, /<p class="dg-callout-body"><\/p>/, 'empty text yields an empty body paragraph');
+  assert.match(html, /<div class="dg-callout dg-callout--primary" role="note" aria-label="Heads up">/);
+});
+
 test('table header:false treats numeric first rows as body data', () => {
   // rowsToTableData auto-detects a header for array-of-arrays only when the
   // first row is strings; `header: false` must also suppress the header for

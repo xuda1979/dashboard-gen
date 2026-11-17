@@ -88,6 +88,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `divider`    | —                                                       |
 | `quote`      | `text`, `cite`                                          |
 | `code`       | `code` (string or lines), `lang`, `title`               |
+| `callout`    | `text`, `title`, `tone` (primary/success/warning/danger/neutral) |
 | `grid`       | `items[]`, `columns`, `columnWidth`                     |
 | `table`      | `rows` (array-of-arrays or array-of-objects), `caption`, `header` |
 | `chart`      | `kind` (line/bar/pie), `title`, `caption`, `start`, `data`/`file`/`fetch` |
