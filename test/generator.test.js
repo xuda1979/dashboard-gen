@@ -1226,6 +1226,17 @@ test('page-level nav auto-links section titles when no nav key is given', () => 
   assert.match(html, /id="s-docs-more"/);
 });
 
+test('explicit empty nav list suppresses the nav landmark entirely', () => {
+  // `nav: []` is a valid (empty) overrides list: it disables the auto-generated
+  // section nav but must not emit a hollow <nav> element either — renderNav
+  // falls through to the `!links.length` early return when the explicit list is
+  // empty and there are no sections left to auto-link.
+  const doc = { title: 'nonav', nav: [], sections: [] };
+  const html = renderHtml(doc);
+  assert.ok(!html.includes('<nav class="dg-nav"'), 'no nav landmark is emitted');
+  assert.ok(!html.includes('class="dg-navlink"'), 'no nav links rendered');
+});
+
 test('duplicate section titles get deduped anchor ids shared with the auto nav', () => {
   // Two sections titled "Same" must not emit duplicate id="s-same" attributes
   // (invalid HTML with ambiguous anchors); the second becomes s-same-2, and the
