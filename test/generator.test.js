@@ -324,6 +324,45 @@ test('watch mode reports a failed initial build cleanly instead of crashing', ()
   }
 });
 
+test('watch recovers when the DSL is fixed after a failed initial build', async () => {
+  // The failed-initial-build test above pins the clean diagnostic; this one pins
+  // the retry half of that contract ("must leave the watcher running for a later
+  // retry"). After the initial build fails, fixing the DSL must trigger a real
+  // rebuild on the *same* watcher — not only a clean error message.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-retry-'));
+  const src = path.join(tmp, 'site.yaml');
+  const out = path.join(tmp, 'dist', 'site.html');
+  fs.writeFileSync(src, 'title: bad\nsections:\n  - content:\n      - type: nope\n');
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origExit = process.exitCode;
+  let stderr = '';
+  const origWrite = process.stderr.write;
+  process.stderr.write = (s) => { stderr += String(s); return true; };
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'));
+    assert.match(stderr, /Unknown component type "nope"/, 'initial build failure reported');
+
+    fs.writeFileSync(src, 'title: fixed\nsections: []\n');
+    let rebuilt = false;
+    for (let i = 0; i < 25; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (fs.existsSync(out) && fs.readFileSync(out, 'utf8').includes('fixed')) { rebuilt = true; break; }
+    }
+    assert.ok(rebuilt, 'watcher rebuilt the page after the DSL was fixed');
+  } finally {
+    process.stderr.write = origWrite;
+    if (watcher) watcher.close();
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('dg watch exits cleanly with code 0 on SIGINT', async () => {
   // The watch loop registers a SIGINT handler that closes the watcher and
   // exits 0; without it Ctrl-C would kill the process with the default signal
