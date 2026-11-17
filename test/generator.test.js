@@ -2273,6 +2273,49 @@ test('dg new refuses to overwrite an existing directory', () => {
   }
 });
 
+test('dg new refuses a project path squatted by a file with a clean error', () => {
+  // `dg new block/site` where "block" is a plain file would make the recursive
+  // mkdir throw a raw ENOTDIR stack; the CLI must surface a clean one-line
+  // diagnostic (matching the build output-directory guard) with exit code 1
+  // and must not leave a partially scaffolded project behind.
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-squat-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  fs.writeFileSync(path.join(cwd, 'block'), 'a file');
+  fs.mkdirSync(path.join(cwd, 'ndir'), { recursive: true });
+
+  const origWrite = process.stderr.write;
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  let errMsg = '';
+  process.stderr.write = (s) => { errMsg += String(s); return true; };
+  console.error = (s) => { errMsg += String(s); };
+  try {
+    cli(['new', 'block/site']);
+    assert.match(errMsg, /Project path is a file, not a directory: block/);
+    assert.ok(!errMsg.includes('ENOTDIR'), 'no raw ENOTDIR stack leaks through');
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on a file-squatted path');
+    assert.ok(!fs.existsSync(path.join(cwd, 'block', 'site')), 'no scaffold written under the file');
+    assert.ok(!fs.existsSync(path.join(cwd, 'block', 'dg.dsl.yaml')), 'no dg.dsl.yaml leaked');
+
+    // A legitimate nested path (all ancestors are directories) must not trip
+    // the guard: the walk passes and the scaffold lands as usual.
+    errMsg = '';
+    process.exitCode = 0;
+    cli(['new', 'ndir/sub']);
+    assert.strictEqual(process.exitCode, 0, 'nested dir scaffolding still succeeds');
+    assert.ok(!errMsg, 'no error output for a directory-backed nested path');
+    assert.ok(fs.existsSync(path.join(cwd, 'ndir', 'sub', 'dg.dsl.yaml')), 'nested scaffold written');
+  } finally {
+    process.stderr.write = origWrite;
+    console.error = origErr;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('unknown CLI command fails with an error', () => {
   // The dispatch default prints an unknown-command error plus help text.
   const { cli } = require('../lib/cli');
