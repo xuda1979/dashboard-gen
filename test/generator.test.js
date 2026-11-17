@@ -2722,6 +2722,48 @@ test('build copies a flat root-level fetch fixture next to the page', () => {
   }
 });
 
+test('build skips a fetch fixture that does not exist on disk, keeping its URL', () => {
+  // copyLocalFixtures quietly skips relative fixture paths that are absent —
+  // the built page still carries the URL in the runtime manifest (the browser
+  // deciding to 404 at fetch time is a runtime concern, not a build failure).
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-fixture-missing-'));
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), [
+    'title: t',
+    'sections:',
+    '  - content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: A',
+    '        data: { fetch: "data/missing.json" }',
+    '',
+  ].join('\n'));
+
+  const { cmdBuild } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    cmdBuild({ _: ['dg.dsl.yaml'] });
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'site.html')),
+      'build still succeeds with a missing fixture'
+    );
+    assert.ok(
+      !fs.existsSync(path.join(tmp, 'dist', 'data', 'missing.json')),
+      'absent fixture is not copied (no spurious dir/file created)'
+    );
+    const html = fs.readFileSync(path.join(tmp, 'dist', 'site.html'), 'utf8');
+    assert.match(
+      html,
+      /"url":"data\/missing\.json"/,
+      'URL kept in the runtime manifest for the browser to resolve'
+    );
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Component coverage: paragraph, grid, quote, divider
 // ---------------------------------------------------------------------------
