@@ -1373,6 +1373,18 @@ test('a multi-word layout value resolves to its first word', () => {
   assert.match(grid, /class="dg-layout-grid"/, 'multi-word grid resolves to grid');
 });
 
+test('resolveLayout falls back to landing for an unknown layout name', () => {
+  // validatePage rejects unknown layout tokens before renderHtml ever calls
+  // resolveLayout, so the fallback is only reachable when the exported helper
+  // is driven directly. An unrecognized token must resolve to a real layout
+  // (landing) rather than leaking an undefined key into the class emission.
+  const { resolveLayout } = require('../lib/render');
+  assert.strictEqual(resolveLayout({ layout: 'nonsense' }), 'landing',
+    'unknown layout token falls back to landing');
+  assert.strictEqual(resolveLayout({ layout: 'hero extras' }), 'hero',
+    'first word still wins before the unknown-token fallback');
+});
+
 test('grid component honors columns as a fixed layout and defaults to auto-fill', () => {
   const doc = {
     title: 'grid-comp',
@@ -4066,6 +4078,29 @@ test('collectLocalDataRefs recurses through nested non-chart components', () => 
     ),
     [dataFile],
     'nested chart binding is collected through the grid/items recursion'
+  );
+});
+
+test('collectLocalDataRefs skips non-object comps and rejects an empty file binding', () => {
+  // The walker's guard at the top of visit() treats primitives as leaves, so a
+  // stray string in a slot that normally holds components cannot crash the
+  // watch scan. A chart with an empty file binding is the one input the walker
+  // rejects outright: the render pass throws the same DataFileError, and the
+  // watch path must not silently drop the bound file from the ref set.
+  const { collectLocalDataRefs } = require('../lib/render');
+  const { DataFileError } = require('../lib/errors');
+  assert.deepStrictEqual(
+    collectLocalDataRefs({ title: 't', hero: 'plain-text-string' }),
+    [],
+    'non-object comps are leaves and contribute no refs'
+  );
+
+  assert.throws(
+    () => collectLocalDataRefs({ title: 't', sections: [{ content: [
+      { type: 'chart', kind: 'line', file: '' },
+    ] }] }),
+    (err) => err instanceof DataFileError && /non-empty path/.test(err.message),
+    'empty file binding is rejected with the same DataFileError as rendering'
   );
 });
 
