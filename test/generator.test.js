@@ -3511,6 +3511,78 @@ test('watch rebuilds when a local fetch fixture changes', async () => {
   }
 });
 
+test('watch stays live when a data-file rebuild fails, then rebuilds on the fix', async () => {
+  // A change to a bound data file that breaks the build (here invalid JSON)
+  // must surface the same clean DataFileError diagnostic as a one-shot build —
+  // never a raw stack — and the watcher must keep watching. In particular the
+  // data-ref watchers from the successful initial build must NOT be torn down by
+  // the failed rebuild (the failure path never runs watchDataRefs' cleanup, which
+  // would close the very watcher needed to notice the file being fixed).
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-dfail-'));
+  const src = path.join(tmp, 'site.yaml');
+  const dataFile = path.join(tmp, 'data.json');
+  const out = path.join(tmp, 'dist', 'site.html');
+  fs.writeFileSync(dataFile, '[["Jan",5],["Feb",10]]\n');
+  fs.writeFileSync(src, [
+    'title: DataPage',
+    'sections:',
+    '  - title: Metrics',
+    '    content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: R',
+    '        file: data.json',
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origExit = process.exitCode;
+  let stderr = '';
+  const origWrite = process.stderr.write;
+  process.stderr.write = (s) => { stderr += String(s); return true; };
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'));
+    const waitFor = async (fn, tries = 25) => {
+      for (let i = 0; i < tries; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        if (fn()) return true;
+      }
+      return false;
+    };
+    await waitFor(() => fs.existsSync(out) && fs.readFileSync(out, 'utf8').includes('Jan'));
+
+    // Corrupt the bound file: the rebuild fails with the clean diagnostic.
+    stderr = '';
+    fs.writeFileSync(dataFile, 'not json at all\n');
+    const failed = await waitFor(() => stderr.includes('is not valid JSON'));
+    assert.ok(failed, 'failed rebuild reported the data-file error');
+    // The clean diagnostic may carry the dashboard-style location anchor
+    // ("\n  at: page.sections..."), but a raw v8 stack traces indents its frames
+    // with four spaces — that must never leak out of the failed rebuild.
+    assert.ok(!/\n {4}at /.test(stderr), 'no raw stack trace leaks out of the failed rebuild');
+
+    // Fix the file: the SAME watcher must still be alive and rebuild it.
+    stderr = '';
+    fs.writeFileSync(dataFile, '[["Jan",5],["Feb",99]]\n');
+    const recovered = await waitFor(() => {
+      if (!fs.existsSync(out)) return false;
+      const html = fs.readFileSync(out, 'utf8');
+      return html.includes('99');
+    });
+    assert.ok(recovered, 'watcher survived the failed rebuild and rebuilt on the fix');
+  } finally {
+    process.stderr.write = origWrite;
+    if (watcher) watcher.close();
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Component coverage: paragraph, grid, quote, divider
 // ---------------------------------------------------------------------------
