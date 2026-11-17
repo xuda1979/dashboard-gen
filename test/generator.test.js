@@ -630,6 +630,145 @@ test('dg build fails cleanly when a plain file squats on the output directory', 
   }
 });
 
+test('dg build fails cleanly on an unreadable DSL source instead of a raw fs stack', () => {
+  // ensureArg only checks existence/directory-ness, so a chmod-000 DSL passes
+  // it; buildOne's readFileSync would then throw a raw EACCES stack that
+  // errorOut's else branch would leak verbatim. The read must be converted into
+  // the clean ParseError style used for a missing DSL file. Watch shares
+  // buildOne via runBuild and must surface the same clean diagnostic.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-unreadable-'));
+  const dsl = path.join(tmp, 'site.yaml');
+  fs.writeFileSync(dsl, 'title: t\nsections: []\n');
+  fs.chmodSync(dsl, 0o000);
+
+  const { cli, watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origWrite = process.stderr.write;
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  process.chdir(tmp);
+  let errMsg = '';
+  process.stderr.write = (s) => { errMsg += String(s); return true; };
+  console.error = (s) => { errMsg += String(s); };
+  let watcher;
+  try {
+    cli(['build', 'site.yaml']);
+    assert.match(errMsg, /Could not read DSL source/);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on an unreadable DSL file');
+    assert.ok(!/EACCES|\sat /.test(errMsg), 'no raw EACCES stack trace leaks through');
+
+    errMsg = '';
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    watcher = watch(path.resolve('site.yaml'));
+    assert.match(errMsg, /Could not read DSL source/);
+    assert.ok(!/EACCES|\sat /.test(errMsg), 'watch reports the same clean diagnostic');
+    assert.strictEqual(process.exitCode, 1, 'watch sets a failing exit code too');
+  } finally {
+    process.stderr.write = origWrite;
+    console.error = origErr;
+    if (watcher) watcher.close();
+    fs.chmodSync(dsl, 0o644);
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
+test('dg build fails cleanly on an unreadable fetch fixture instead of a raw fs stack', () => {
+  // copyLocalFixtures copies local fetch fixtures next to the output; a
+  // chmod-000 fixture would make copyFileSync throw a raw EACCES stack that
+  // errorOut's else branch would leak verbatim. The copy must throw the clean
+  // DataFileError style used for an unreadable chart data file.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-unreadable-fixture-'));
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), [
+    'title: t',
+    'sections:',
+    '  - content:',
+    '      - type: chart',
+    '        kind: line',
+    '        data: { fetch: "secret.json" }',
+    '',
+  ].join('\n'));
+  const fixture = path.join(tmp, 'secret.json');
+  fs.writeFileSync(fixture, '[{"label":"x","series":{"v":1}}]');
+  fs.chmodSync(fixture, 0o000);
+
+  const { cli, watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origWrite = process.stderr.write;
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  process.chdir(tmp);
+  let errMsg = '';
+  process.stderr.write = (s) => { errMsg += String(s); return true; };
+  console.error = (s) => { errMsg += String(s); };
+  let watcher;
+  try {
+    cli(['build', 'dg.dsl.yaml']);
+    assert.match(errMsg, /Could not read fixture "secret\.json" \(EACCES\)/);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on an unreadable fixture');
+    assert.ok(!/^\s*at /m.test(errMsg), 'no raw fs stack trace leaks through');
+
+    errMsg = '';
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    watcher = watch(path.resolve('dg.dsl.yaml'));
+    assert.match(errMsg, /Could not read fixture "secret\.json" \(EACCES\)/);
+    assert.ok(!/^\s*at /m.test(errMsg), 'watch reports the same clean diagnostic');
+    assert.strictEqual(process.exitCode, 1, 'watch sets a failing exit code too');
+  } finally {
+    process.stderr.write = origWrite;
+    console.error = origErr;
+    if (watcher) watcher.close();
+    fs.chmodSync(fixture, 0o644);
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
+test('dg build fails cleanly when the output directory is not writable instead of a raw fs stack', () => {
+  // A chmod-000 dist/ dir makes mkdirSync a no-op and writeFileSync throw a raw
+  // EACCES stack that errorOut's else branch would leak verbatim. The write
+  // must be converted into the clean DashboardError one-line style.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-unwritable-out-'));
+  fs.writeFileSync(path.join(tmp, 'site.yaml'), 'title: t\nsections: []\n');
+  const dist = path.join(tmp, 'dist');
+  fs.mkdirSync(dist);
+  fs.chmodSync(dist, 0o000);
+
+  const { cli, watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  const origWrite = process.stderr.write;
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  process.chdir(tmp);
+  let errMsg = '';
+  process.stderr.write = (s) => { errMsg += String(s); return true; };
+  console.error = (s) => { errMsg += String(s); };
+  let watcher;
+  try {
+    cli(['build', 'site.yaml']);
+    assert.match(errMsg, /Could not write output \(EACCES\): dist\/site\.html/);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on an unwritable output dir');
+    assert.ok(!/^\s*at /m.test(errMsg), 'no raw fs stack trace leaks through');
+
+    errMsg = '';
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    watcher = watch(path.resolve('site.yaml'));
+    assert.match(errMsg, /Could not write output \(EACCES\): dist\/site\.html/);
+    assert.ok(!/^\s*at /m.test(errMsg), 'watch reports the same clean diagnostic');
+    assert.strictEqual(process.exitCode, 1, 'watch sets a failing exit code too');
+  } finally {
+    process.stderr.write = origWrite;
+    console.error = origErr;
+    if (watcher) watcher.close();
+    fs.chmodSync(dist, 0o755);
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('css tokens are emitted in kebab-case so pages are actually styled', () => {
   const html = buildFixture('landing');
   assert.match(html, /--page-bg: #f6f8fa;/);
@@ -2373,6 +2512,42 @@ test('dg new refuses a project path squatted by a file with a clean error', () =
     process.stderr.write = origWrite;
     console.error = origErr;
     process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
+test('dg new fails cleanly when the project dir cannot be written instead of a raw fs stack', () => {
+  // cmdNew writes with bare fs calls; a chmod-000 parent dir would make the
+  // recursive mkdir throw a raw EACCES stack that errorOut's else branch would
+  // leak verbatim. The write block must convert filesystem errors into the
+  // clean one-line diagnostic style (matching the build output-write guard)
+  // and must not leave a partially scaffolded project behind.
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-unwritable-'));
+  const blocked = path.join(cwd, 'blocked');
+  fs.mkdirSync(blocked);
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  fs.chmodSync(blocked, 0o000);
+
+  const origWrite = process.stderr.write;
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  let errMsg = '';
+  process.stderr.write = (s) => { errMsg += String(s); return true; };
+  console.error = (s) => { errMsg += String(s); };
+  try {
+    cli(['new', 'blocked/site']);
+    assert.match(errMsg, /Could not create project \(EACCES\): blocked\/site/);
+    assert.ok(!/^\s*at /m.test(errMsg), 'no raw EACCES stack trace leaks through');
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 on an unwritable project path');
+    assert.ok(!fs.existsSync(path.join(blocked, 'site')), 'no scaffold written under the blocked dir');
+  } finally {
+    process.stderr.write = origWrite;
+    console.error = origErr;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    fs.chmodSync(blocked, 0o755);
     process.chdir(origCwd);
   }
 });
