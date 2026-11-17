@@ -1102,6 +1102,23 @@ test('link falls back to label key and headline defaults to h2', () => {
   assert.ok(!html.includes('<h9'), 'out-of-range level never renders raw');
 });
 
+test('button and link default to placeholder text and href when absent', () => {
+  // README: button takes `text`; link takes `text`/`label` and `href`. A
+  // missing text falls back to "Button"/"Link" and a missing link href falls
+  // back to "#" so the anchor stays well-formed.
+  const html = renderHtml({
+    title: 'defaults',
+    sections: [{
+      content: [
+        { type: 'button', style: 'primary' },
+        { type: 'link' },
+      ],
+    }],
+  });
+  assert.match(html, /<button type="button" class="dg-btn dg-btn--primary">Button<\/button>/);
+  assert.match(html, /<a href="#" class="dg-link">Link<\/a>/);
+});
+
 test('chart and table captions surface as aria-labels and notes', () => {
   // README: table takes a `caption` (rendered as the table aria-label) and
   // chart takes a `caption` (rendered as the figure aria-label plus a visible
