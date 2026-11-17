@@ -1910,12 +1910,17 @@ test('serve resolves nested paths inside the served dir and blocks traversal', a
   try {
     const ok = await get('/');
     const nested = await get('/sub/a.html');
+    const dir = await get('/sub');
+    const dirSlash = await get('/sub/');
     const escape = await get('/../secret.txt');
     const encoded = await get('/%E0%A4%A');
     assert.strictEqual(ok.status, 200);
     assert.strictEqual(ok.body, '<h1>root</h1>');
     assert.strictEqual(nested.status, 200);
     assert.strictEqual(nested.body, '<h1>nested</h1>');
+    assert.strictEqual(dir.status, 404, 'request resolving to a directory is 404');
+    assert.strictEqual(dir.body, 'not found');
+    assert.strictEqual(dirSlash.status, 404, 'directory request with trailing slash is 404');
     assert.strictEqual(escape.status, 403, 'path traversal blocked');
     assert.strictEqual(encoded.status, 400, 'malformed encoding rejected');
   } finally {
