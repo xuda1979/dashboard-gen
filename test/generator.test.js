@@ -2822,6 +2822,37 @@ test('dg new with an unknown template fails and scaffolds nothing', () => {
   }
 });
 
+test('dg new fails cleanly when the template examples file is missing', () => {
+  // templateSource falls back to null when examples/<template>.yaml does not
+  // exist (a packaged installation with a pruned examples/ dir, say); cmdNew
+  // must surface a one-line diagnostic naming the missing file, exit 1, and
+  // scaffold nothing. The stub reaches cli.js through the shared fs module
+  // instance (both files require the same node:fs cache).
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-missingtpl-'));
+  const { cli } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+
+  const origExists = fs.existsSync;
+  fs.existsSync = (p) => (typeof p === 'string' && /landing\.yaml$/.test(p)) ? false : origExists(p);
+  const origErr = console.error;
+  const origExit = process.exitCode;
+  let errMsg = '';
+  console.error = (s) => { errMsg += String(s); };
+  try {
+    cli(['new', 'missing-tpl']);
+    assert.match(errMsg, /Template source missing \(examples\/landing\.yaml\)/);
+    assert.strictEqual(process.exitCode, 1, 'exit code 1 when the template source is missing');
+    assert.ok(!fs.existsSync(path.join(cwd, 'missing-tpl')), 'no directory scaffolded');
+  } finally {
+    fs.existsSync = origExists;
+    console.error = origErr;
+    process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
 test('dg new with a bare --template/-t flag (no value) fails cleanly', () => {
   // parseArgs treats a trailing flag with no value as boolean true. A bare
   // `--template` or `-t` therefore must not silently pick a default template:
