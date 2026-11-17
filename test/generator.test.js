@@ -3356,3 +3356,27 @@ test('chart with no data and no file binds an empty store and renders the figure
   assert.ok(!/data-chart-source=/.test(html), 'no fetch source wired for a chart without data');
 });
 
+test('file binding takes precedence over an unrecognized data object', () => {
+  // A chart that carries BOTH an unparseable data object ({ bogus: 1 }) and a
+  // file binding must resolve through the file, not fail: the collect pass
+  // treats an unrecognized data shape as absent and falls back to the file
+  // (render.js line 108) before the "data must be inline rows, { csv }, ..."
+  // StyleError. This keeps a file binding authoritative over a bad data field
+  // while bare unrecognized data still throws (pinned separately).
+  const tmp = path.join(ExampleTmp(), 'file-wins');
+  const fileDir = path.join(tmp, 'fixtures');
+  fs.mkdirSync(fileDir, { recursive: true });
+  fs.writeFileSync(path.join(fileDir, 'data.json'), JSON.stringify([{ label: 'fw', series: { v: 3 } }]));
+  const doc = {
+    title: 't',
+    sections: [{ title: 'S', content: [{ type: 'chart', kind: 'line', data: { bogus: 1 }, file: 'data.json' }] }],
+  };
+  let html;
+  assert.doesNotThrow(() => { html = renderHtml(doc, { fileDir }); }, 'file wins over an unrecognized data shape');
+  assert.match(
+    html,
+    /window\.__DG_DATA__ = \{"chart-0":\[\{"label":"fw","series":\{"v":3\}\}\]\}/,
+    'the store binds the file rows'
+  );
+});
+
