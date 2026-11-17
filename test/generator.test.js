@@ -2764,6 +2764,44 @@ test('build skips a fetch fixture that does not exist on disk, keeping its URL',
   }
 });
 
+test('build mirrors a fixture directory containing nested subdirectories', () => {
+  // copyDirRecursive recurses into subdirectories of a fixture URL that points
+  // at a directory; a nested folder must be recreated relative to the output
+  // root rather than flattened or dropped.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-fixture-nested-'));
+  fs.mkdirSync(path.join(tmp, 'assets', 'icons'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'assets', 'logo.svg'), '<svg/>');
+  fs.writeFileSync(path.join(tmp, 'assets', 'icons', 'ok.png'), 'x');
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), [
+    'title: t',
+    'sections:',
+    '  - content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: A',
+    '        data: { fetch: "assets/" }',
+    '',
+  ].join('\n'));
+
+  const { cmdBuild } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    cmdBuild({ _: ['dg.dsl.yaml'] });
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'assets', 'logo.svg')),
+      'top-level fixture file copied'
+    );
+    assert.ok(
+      fs.existsSync(path.join(tmp, 'dist', 'assets', 'icons', 'ok.png')),
+      'nested subdirectory mirrored with its file'
+    );
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 // ---------------------------------------------------------------------------
 // Component coverage: paragraph, grid, quote, divider
 // ---------------------------------------------------------------------------
