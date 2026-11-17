@@ -3955,6 +3955,46 @@ test('collectLocalDataRefs resolves an absolute file binding as-is without fileD
   }
 });
 
+test('collectLocalDataRefs guards a missing sections key and null section entries', () => {
+  // The watch-path collector walks (doc.sections || []) with null-entry skips,
+  // mirroring the render pass guards. A doc that omits `sections` entirely, or
+  // one with a null section (YAML "- "), must yield the same ref set instead of
+  // crashing on iterating undefined / reading a property of null.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-refs-guards-'));
+  const absFile = path.join(tmp, 'abs.json');
+  fs.writeFileSync(absFile, '[["Mar",3]]\n');
+
+  const { collectLocalDataRefs } = require('../lib/render');
+
+  assert.deepStrictEqual(collectLocalDataRefs({ title: 't' }), [],
+    'missing sections key walks an empty list');
+  assert.deepStrictEqual(
+    collectLocalDataRefs({
+      title: 't',
+      sections: [
+        null,
+        { content: [{ type: 'chart', kind: 'line', file: absFile }] },
+      ],
+    }),
+    [absFile],
+    'null section skipped, surviving binding still collected'
+  );
+});
+
+test('collectLocalDataRefs falls back when a doc has no sections key', () => {
+  // Isolates the (sections || []) fallback in the watch collector: a hero-only
+  // doc has no sections key, and the walker must still collect the hero's file
+  // binding without throwing on undefined sections. The empty sections list
+  // simply contributes nothing extra.
+  const { collectLocalDataRefs } = require('../lib/render');
+  assert.deepStrictEqual(
+    collectLocalDataRefs({ title: 't', hero: [{ type: 'chart', kind: 'line', file: 'nope.csv' }] }),
+    ['nope.csv'],
+    'hero walk runs, missing sections key contributes no extra refs'
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Component coverage: paragraph, grid, quote, divider
 // ---------------------------------------------------------------------------
