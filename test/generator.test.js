@@ -30,6 +30,34 @@ test('landing example produces a single HTML page', () => {
   assert.ok(!html.includes('<script src=') && !html.includes('<link rel="stylesheet" href='), 'no external assets');
 });
 
+test('dashboard runbook section exercises the remaining component library', () => {
+  // The flagship example doubles as the component showcase: alongside the
+  // grid/stat/table/chart sections it now renders callout, list, divider,
+  // quote, code, and badge — the components no other example uses — so the
+  // canonical DSL proves the full 15-component library renders in one page.
+  const html = buildFixture('dashboard');
+  assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
+    'nav links the runbook section');
+  assert.match(html, /<h2 class="dg-section-title" id="s-runbook"/);
+  assert.match(html, /<div class="dg-callout dg-callout--warning" role="note" aria-label="Incident playbook">/);
+  assert.match(html, /<div class="dg-callout-title">Incident playbook<\/div>/);
+  assert.match(html, /<p class="dg-callout-body">Follow the ordered steps below/);
+  assert.match(html, /<ul class="dg-ul"><li>Assess blast radius and page the on-call engineer\.<\/li>/);
+  const runbook = html.match(/<h2 class="dg-section-title" id="s-runbook">[\s\S]*$/)[0];
+  assert.strictEqual((runbook.match(/<li>/g) || []).length, 4, 'runbook lists four steps');
+  assert.match(html, /<hr class="dg-divider">/);
+  assert.match(html, /<blockquote class="dg-quote"><p>Production is the least interesting environment/);
+  assert.match(html, /<footer class="dg-quote-cite">— Ops Handbook<\/footer>/);
+  assert.match(html, /<div class="dg-code" role="region" aria-label="Rollback" data-code-lang="bash">/);
+  assert.match(html, /<span class="dg-code-lang">bash<\/span>/);
+  assert.match(
+    html,
+    /<code class="dg-code-body">curl -s https:\/\/api\.example\.internal\/releases\/latest\ndg deploy --service billing-worker --rev \$REV\ncurl -s -f https:\/\/api\.example\.internal\/healthz<\/code>/,
+    'code block joins its lines with newlines and keeps shell syntax verbatim'
+  );
+  assert.match(html, /<span class="dg-badge dg-badge--success">healthy<\/span>/);
+});
+
 test('table example renders semantic table with headers and aria label', () => {
   const html = buildFixture('table');
   assert.match(html, /<table class="dg-table"/);

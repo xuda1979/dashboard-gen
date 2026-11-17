@@ -18,6 +18,7 @@ nav:
   - { label: Overview, href: "#s-overview" }
   - { label: Metrics, href: "#s-metrics" }
   - { label: Releases, href: "#s-releases" }
+  - { label: Runbook, href: "#s-runbook" }
 
 sections:
   - title: Overview
@@ -96,3 +97,43 @@ sections:
             series: { gb: 210 }
           - label: ml
             series: { gb: 480 }
+
+  - title: Runbook
+    content:
+      - type: callout
+        tone: warning
+        title: Incident playbook
+        text: Follow the ordered steps below — never skip the rollback check before announcing an incident.
+
+      - type: list
+        items:
+          - Assess blast radius and page the on-call engineer.
+          - Freeze deploys and record the current release hash.
+          - Roll back to the last known-good release and verify health.
+          - Post the incident timeline to the ops channel.
+
+      - type: divider
+
+      - type: quote
+        text: Production is the least interesting environment — until it is the only one.
+        cite: Ops Handbook
+
+      - type: divider
+
+      - type: paragraph
+        text: "Typical recovery commands for the billing-worker service:"
+
+      - type: code
+        title: Rollback
+        lang: bash
+        code:
+          - "curl -s https://api.example.internal/releases/latest"
+          - "dg deploy --service billing-worker --rev $REV"
+          - "curl -s -f https://api.example.internal/healthz"
+
+      - type: paragraph
+        text: "Deploy health status:"
+
+      - type: badge
+        tone: success
+        text: healthy
