@@ -2945,6 +2945,28 @@ test('bin/dg entry point dispatches help and build as a subprocess', () => {
   );
 });
 
+test('dg new scaffolds a README runbook that names the template', () => {
+  // A scaffolded repo ships only dg.dsl.yaml + package.json + a Pages workflow;
+  // the README completes it with the build/serve/edit/deploy loop so a visitor
+  // does not need the dashboard-gen docs to run the project.
+  const os = require('node:os');
+  const { cmdNew } = require('../lib/cli');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-readme-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    cmdNew({ _: ['rd'], template: 'chart' });
+    const readme = fs.readFileSync(path.join(cwd, 'rd', 'README.md'), 'utf8');
+    assert.match(readme, /# rd-site/, 'title derives from the project name');
+    assert.match(readme, /chart template/, 'names the scaffolded template');
+    assert.match(readme, /npm run build/, 'documents the build command');
+    assert.match(readme, /dg\.dsl\.yaml/, 'points at the DSL as the source of truth');
+    assert.match(readme, /pages\.yml/, 'points at the Pages workflow for deploy');
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 test('dg new -t fetch scaffolds a project with fixture, workflow, and deps', () => {
   const { cmdNew } = require('../lib/cli');
   const os = require('node:os');
