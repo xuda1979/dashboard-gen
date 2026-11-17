@@ -1336,6 +1336,26 @@ test('stat drops non-numeric delta/progress and clamps progress to 0-100', () =>
   assert.ok(!/dg-stat-progress-fill--glow/.test(body), 'unknown progressTone falls back to primary');
 });
 
+test('stat falls back to title label and to a bare stat aria-label', () => {
+  // components.js renderStat: the figure label is `c.label || c.title || ''`.
+  // A stat given only a `title:` uses it as the label, and one with neither
+  // still renders with the accessible name "stat" and an empty label line
+  // instead of an unlabeled figure.
+  const html = renderHtml({
+    title: 'stat-labels',
+    sections: [{
+      content: [
+        { type: 'stat', title: 'Sessions', value: '12' },
+        { type: 'stat', value: '99' },
+      ],
+    }],
+  });
+  assert.match(html, /class="dg-stat" role="img" aria-label="Sessions"/);
+  assert.match(html, /class="dg-stat-label">Sessions<\/div>/);
+  assert.match(html, /class="dg-stat" role="img" aria-label="stat"/);
+  assert.match(html, /class="dg-stat-label"><\/div>/);
+});
+
 test('grid card shorthand and quote cite object render their cell forms', () => {
   // README: a grid `items` entry may be `{ card: {...} }` (full card inside a
   // cell) and a quote `cite` may be `{ text }`. Both were unpinned.
