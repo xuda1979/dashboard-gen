@@ -1353,6 +1353,26 @@ test('layouts render hollow cells for sections with no widget content', () => {
   assert.match(landing, /<section class="dg-section"><\/section>/, 'empty section -> hollow stacked section');
 });
 
+test('a multi-word layout value resolves to its first word', () => {
+  // The loader validates the first whitespace-delimited token of a layout
+  // string and resolveLayout uses the same split, so a value like "hero
+  // columns" (an accidental trailing descriptor) renders the hero layout
+  // instead of erroring or silently producing the wrong layout.
+  const hero = renderHtml({
+    title: 'multiword',
+    layout: 'hero columns',
+    sections: [{ title: 'H', content: [{ type: 'paragraph', text: 'x' }] }],
+  });
+  assert.match(hero, /class="dg-hero-layout"/, 'first word of a multi-word layout wins');
+
+  const grid = renderHtml({
+    title: 'multiword2',
+    layout: 'grid layout',
+    sections: [{ title: 'G', content: [{ type: 'card', title: 'a', text: 'b' }] }],
+  });
+  assert.match(grid, /class="dg-layout-grid"/, 'multi-word grid resolves to grid');
+});
+
 test('grid component honors columns as a fixed layout and defaults to auto-fill', () => {
   const doc = {
     title: 'grid-comp',
@@ -3835,6 +3855,80 @@ test('watch drops a data-file watcher when the DSL stops binding that file', asy
     process.stdout.write = origOutWrite;
     if (watcher) watcher.close();
     process.exitCode = origExit === undefined ? 0 : origExit;
+    process.chdir(origCwd);
+  }
+});
+
+test('watch follows an absolute-path chart file binding', async () => {
+  // collectLocalDataRefs adds an absolute `file:` path as-is (no fileDir join),
+  // and watchDataFile watches that absolute path's parent dir. So a data file
+  // living outside the DSL directory must still rebuild the page on edit —
+  // distinct from the relative-binding watch tests.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-abs-'));
+  const dataDir = path.join(tmp, 'elsewhere');
+  fs.mkdirSync(dataDir, { recursive: true });
+  const absData = path.join(dataDir, 'rows.json');
+  const src = path.join(tmp, 'site.yaml');
+  const out = path.join(tmp, 'dist', 'site.html');
+  fs.writeFileSync(absData, '[["Jan",5],["Feb",10]]\n');
+  fs.writeFileSync(src, [
+    'title: AbsData',
+    'sections:',
+    '  - title: Metrics',
+    '    content:',
+    '      - type: chart',
+    '        kind: line',
+    '        title: R',
+    '        file: ' + JSON.stringify(absData),
+    '',
+  ].join('\n'));
+  fs.mkdirSync(path.join(tmp, 'dist'), { recursive: true });
+
+  const { watch } = require('../lib/cli');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  let watcher;
+  try {
+    watcher = watch(path.resolve('site.yaml'));
+    await new Promise((r) => setTimeout(r, 250)); // initial build
+    fs.writeFileSync(absData, '[["Jan",5],["Feb",77]]\n');
+    let rebuilt = false;
+    for (let i = 0; i < 25; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      if (fs.readFileSync(out, 'utf8').includes('77')) { rebuilt = true; break; }
+    }
+    assert.ok(rebuilt, 'watch rebuilt when the absolute-path data file changed');
+  } finally {
+    if (watcher) watcher.close();
+    process.chdir(origCwd);
+  }
+});
+
+test('collectLocalDataRefs resolves an absolute file binding as-is without fileDir', () => {
+  // With no fileDir option, a relative `file:` path joins against '.' (staying
+  // a cwd-relative ref, mirroring loadDataFile), while an absolute binding is
+  // used as-is — so the watch ref set stays consistent with what the build
+  // actually reads even when no fileDir is supplied.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-refs-nofiledir-'));
+  const absFile = path.join(tmp, 'abs.json');
+  fs.writeFileSync(absFile, '[["Feb",7]]\n');
+
+  const { collectLocalDataRefs } = require('../lib/render');
+  const origCwd = process.cwd();
+  process.chdir(tmp);
+  try {
+    const refs = collectLocalDataRefs({
+      title: 't',
+      sections: [
+        { content: [{ type: 'chart', kind: 'line', file: 'data.json' }] },
+        { content: [{ type: 'chart', kind: 'line', file: absFile }] },
+      ],
+    });
+    assert.deepStrictEqual([...refs].sort(), ['data.json', absFile].sort(),
+      'relative binding stays cwd-relative, absolute binding used as-is');
+  } finally {
     process.chdir(origCwd);
   }
 });
