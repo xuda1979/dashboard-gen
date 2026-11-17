@@ -996,6 +996,26 @@ test('hero layout renders sections as hero columns', () => {
   assert.match(html, /Supporting text/);
 });
 
+test('hero layout falls back to content for columns without a hero widget', () => {
+  // Hero-mode layout columns are the section widgets; a section carrying only
+  // `content:` (or neither widget) still renders a column via the
+  // hero||content fallback and the empty-string default.
+  const doc = {
+    title: 'hero-mixed',
+    layout: 'hero',
+    sections: [
+      { content: [{ type: 'paragraph', text: 'Lead via content' }] },
+      { hero: [{ type: 'headline', level: 2, text: 'Hero col' }] },
+      {},
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /class="dg-hero-layout" role="grid"/);
+  assert.match(html, /class="dg-hero-col dg-hero-col--lead" aria-label="Lead"><p class="dg-paragraph">Lead via content<\/p>/);
+  assert.match(html, /class="dg-hero-col"><h2 class="dg-headline dg-h2">Hero col<\/h2>/);
+  assert.match(html, /class="dg-hero-col"><\/div>/, 'empty section renders an empty column');
+});
+
 test('single-object section content is normalized like nav/hero', () => {
   // A section may carry `content:` as a single component object (nav/hero
   // accept one via normalizeWidgets); the section must render it instead of
