@@ -3292,3 +3292,46 @@ test('repo-level Pages workflow builds every example and copies landing to index
   assert.strictEqual(path.basename('landing.yaml', path.extname('landing.yaml')), 'landing');
 });
 
+test('card, badge, and grid shorthand tolerate empty text fields', () => {
+  // The card `text`, badge `text`, and grid item {title, text} shorthand are
+  // all optional in the DSL. A card carrying only a title, a badge with no
+  // text, and a grid item with only title or only text must still render — no
+  // "null" text and no empty-card crash — each falling back to an empty string.
+  const html = buildFromSource(
+    JSON.stringify({
+      title: 't',
+      sections: [
+        {
+          title: 'S',
+          content: [
+            { type: 'card', title: 'Only Title' },
+            { type: 'badge', tone: 'success' },
+            {
+              type: 'grid',
+              items: [{ title: 'THead' }, { text: 'TBody' }],
+            },
+          ],
+        },
+      ],
+    }),
+    'empty-text.yaml'
+  );
+  assert.match(
+    html,
+    /<div class="dg-card"><h3 class="dg-card-title">Only Title<\/h3><\/div>/,
+    'card with a title but no text renders an empty body'
+  );
+  assert.match(
+    html,
+    /<span class="dg-badge dg-badge--success"><\/span>/,
+    'badge with no text renders an empty badge'
+  );
+  assert.match(
+    html,
+    /<div class="dg-cell"><div class="dg-card"><h3 class="dg-card-title">THead<\/h3><\/div><\/div>/,
+    'title-only grid item renders the card title and an empty body'
+  );
+  assert.match(html, /<div class="dg-cell"><div class="dg-card">TBody<\/div><\/div>/, 'text-only grid item');
+  assert.ok(!/>null</.test(html), 'no literal "null" leaks into a rendered text node');
+});
+
