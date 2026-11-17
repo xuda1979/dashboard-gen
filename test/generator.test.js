@@ -3243,3 +3243,52 @@ test('empty or absent table rows render a no-data note instead of a hollow table
   }
 });
 
+test('repo-level Pages workflow builds every example and copies landing to index.html', () => {
+  // README's "GitHub Pages" section documents the repo-root workflow at
+  // .github/workflows/pages.yml: it builds every examples/*.yaml into dist/
+  // and copies the landing page to dist/index.html so the Pages root shows it.
+  // The scaffolded-project workflow (cmdNew) is pinned elsewhere; this one —
+  // which owns the actual examples/ output — is not. Pin its build contract
+  // and prove the input side holds: every example DSL builds and the landing
+  // example produces exactly the file the cp target expects.
+  const wf = fs.readFileSync(
+    path.join(__dirname, '..', '.github', 'workflows', 'pages.yml'),
+    'utf8'
+  );
+  // The build loop: iterate every example DSL and emit it into dist/.
+  assert.match(wf, /mkdir -p dist/);
+  assert.match(wf, /for f in examples\/\*\.yaml; do/);
+  assert.match(wf, /npx dg build "\$f"/);
+  // The landing page becomes the Pages root index (dg build landing.yaml ->
+  // dist/landing.html, matching siteNameFrom's basename derivation).
+  assert.match(wf, /cp dist\/landing\.html dist\/index\.html/);
+  // The deploy chain uploads the whole dist/ dir with the Pages actions.
+  assert.match(wf, /uses: actions\/configure-pages@v5/);
+  assert.match(wf, /uses: actions\/upload-pages-artifact@v3[\s\S]*path: dist/);
+  assert.match(wf, /uses: actions\/deploy-pages@v4/);
+
+  // Executable half: the loop's input side must hold today. Every example
+  // DSL builds through the real public pipeline (no fileDir/cwd pollution),
+  // and the landing example renders the hero the workflow promotes to root.
+  const yamls = fs
+    .readdirSync(EXAMPLE_DIR)
+    .filter((f) => f.endsWith('.yaml'))
+    .sort();
+  assert.ok(yamls.length >= 5, 'examples dir holds the documented templates');
+  for (const f of yamls) {
+    const src = fs.readFileSync(path.join(EXAMPLE_DIR, f), 'utf8');
+    const html = buildFromSource(src, f, { fileDir: 'examples' });
+    assert.match(html, /<!DOCTYPE html>/, `${f} builds a full page`);
+  }
+  const landing = fs.readFileSync(path.join(EXAMPLE_DIR, 'landing.yaml'), 'utf8');
+  const landingHtml = buildFromSource(landing, 'landing.yaml', { fileDir: 'examples' });
+  assert.match(
+    landingHtml,
+    /Your data, shipped in one YAML file/,
+    'landing example carries the hero text the Pages root will show'
+  );
+  // Name derivation: "dg build examples/landing.yaml" writes dist/landing.html
+  // (siteNameFrom strips the extension), which is why the cp target is valid.
+  assert.strictEqual(path.basename('landing.yaml', path.extname('landing.yaml')), 'landing');
+});
+
