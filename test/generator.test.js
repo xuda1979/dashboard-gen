@@ -3995,6 +3995,80 @@ test('collectLocalDataRefs falls back when a doc has no sections key', () => {
   );
 });
 
+test('collectLocalDataRefs resolves fetch bindings relative to fileDir and skips missing fixtures', () => {
+  // The watch collector resolves a relative fetch fixture against fileDir and
+  // only keeps refs that exist on disk (the same existence check decides which
+  // absolute http(s) URLs are excluded as non-local). A relative spec with no
+  // fileDir falls back to ".", and a fixture that does not exist there is left
+  // out of the watch set entirely.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-refs-fetch-'));
+  const present = path.join(tmp, 'present.json');
+  fs.writeFileSync(present, '[["Mar",3]]\n');
+
+  const { collectLocalDataRefs } = require('../lib/render');
+
+  assert.deepStrictEqual(
+    collectLocalDataRefs(
+      { title: 't', sections: [{ content: [
+        { type: 'chart', kind: 'line', data: { fetch: 'present.json' } },
+        { type: 'chart', kind: 'line', data: { fetch: 'missing.json' } },
+      ] }] },
+      tmp
+    ),
+    [present],
+    'present fixture is watched, missing fixture is skipped'
+  );
+
+  assert.deepStrictEqual(
+    collectLocalDataRefs({ title: 't', sections: [{ content: [
+      { type: 'chart', kind: 'line', data: { fetch: 'nope.json' } },
+    ] }] }),
+    [],
+    'no fileDir falls back to cwd and a fixture absent there is skipped'
+  );
+
+  assert.deepStrictEqual(
+    collectLocalDataRefs({ title: 't', sections: [{ content: [
+      { type: 'chart', kind: 'line', data: { fetch: present } },
+    ] }] }),
+    [present],
+    'an absolute fetch fixture is used as-is, independent of fileDir'
+  );
+});
+
+test('collectLocalDataRefs recurses through nested non-chart components', () => {
+  // The walker descends through arbitrary intermediate objects before reaching a
+  // chart: here a grid holds an item that holds the chart, so ref collection
+  // must survive the nested-object recursion instead of only visiting top-level
+  // content. The grid itself is skipped from the ref set (no file/data), only
+  // the innermost binding is collected.
+  const os = require('node:os');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-refs-nested-'));
+  const dataFile = path.join(tmp, 'nested.json');
+  fs.writeFileSync(dataFile, '[["Apr",4]]\n');
+
+  const { collectLocalDataRefs } = require('../lib/render');
+
+  assert.deepStrictEqual(
+    collectLocalDataRefs(
+      {
+        title: 't',
+        sections: [{
+          content: [
+            { type: 'grid', items: [
+              { type: 'chart', kind: 'line', file: dataFile },
+            ] },
+          ],
+        }],
+      },
+      tmp
+    ),
+    [dataFile],
+    'nested chart binding is collected through the grid/items recursion'
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Component coverage: paragraph, grid, quote, divider
 // ---------------------------------------------------------------------------
