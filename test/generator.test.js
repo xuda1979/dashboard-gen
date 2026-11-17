@@ -324,6 +324,42 @@ test('watch mode reports a failed initial build cleanly instead of crashing', ()
   }
 });
 
+test('dg watch exits cleanly with code 0 on SIGINT', async () => {
+  // The watch loop registers a SIGINT handler that closes the watcher and
+  // exits 0; without it Ctrl-C would kill the process with the default signal
+  // disposition (exit code 130), not the documented "stop cleanly" contract.
+  const os = require('node:os');
+  const { spawn } = require('node:child_process');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-watch-sigint-'));
+  fs.writeFileSync(path.join(tmp, 'dg.dsl.yaml'), 'title: sigint\nsections: []\n');
+  const binDg = path.join(__dirname, '..', 'bin', 'dg');
+
+  const child = spawn(process.execPath, [binDg, 'watch', 'dg.dsl.yaml'], {
+    cwd: tmp,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let out = '';
+  child.stdout.on('data', (d) => { out += String(d); });
+
+  // Wait until the watcher reports ready before sending the signal so the
+  // SIGINT handler is definitely registered.
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`watch never became ready: ${out}`)), 5000);
+    child.stdout.on('data', () => {
+      if (out.includes('watching')) { clearTimeout(timer); resolve(); }
+    });
+    child.once('error', reject);
+  });
+
+  child.kill('SIGINT');
+  const exitCode = await Promise.race([
+    new Promise((resolve) => child.once('exit', resolve)),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('watch did not exit on SIGINT')), 5000)),
+  ]);
+  assert.strictEqual(exitCode, 0, 'SIGINT exits with code 0');
+  assert.match(out, new RegExp(`watching .*${path.basename(tmp).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`), 'watch reported ready');
+});
+
 test('dg build honors the DG_OUTPUT filename override', () => {
   const os = require('node:os');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-build-out-'));
