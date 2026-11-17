@@ -269,6 +269,59 @@ test('a11y-check linearizes a black channel with the low-value luminance branch'
   assert.match(res.stdout, /passes AA \(4\.5:1\)/, 'reports the compliant ratio');
 });
 
+test('a11y-check fails when a chart figure declares role="img" without an accessible name', () => {
+  // Charts expose their SVG as role="img", so the embedded figure must carry an
+  // accessible name (aria-label or aria-labelledby). The renderer always emits
+  // aria-label="(caption || title)", but the lint accepts arbitrary HTML, so a
+  // hand-written page whose chart figure omits the label must fail. A stale
+  // data-chart-caption attribute is not a substitute — only aria labels count.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-fig-'));
+  const file = path.join(tmp, 'unnamed.html');
+  fs.writeFileSync(
+    file,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main">
+    <div class="dg-figure dg-chart" role="img" data-chart-caption="stale attribute">
+      <svg>...</svg>
+    </div>
+  </main>
+</body>
+</html>`
+  );
+  const res = runCheck(file);
+  assert.strictEqual(res.ok, false, 'expected failure');
+  assert.strictEqual(res.code, 1, 'exit code 1');
+  assert.match(res.stderr, /chart figure missing accessible name:/, 'reports the unnamed chart figure');
+
+  // Companion figure that does carry aria-label must not produce that problem;
+  // and a labelled figure keeps the page green on its own.
+  const good = path.join(tmp, 'named.html');
+  fs.writeFileSync(
+    good,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main">
+    <div class="dg-figure dg-chart" role="img" aria-label="Requests / minute">
+      <svg>...</svg>
+    </div>
+  </main>
+</body>
+</html>`
+  );
+  const resGood = runCheck(good);
+  assert.strictEqual(resGood.ok, true, 'a labelled chart figure passes');
+  assert.ok(!/chart figure missing accessible name/.test(resGood.stdout), 'no missing-name problem on stdout');
+});
+
 test('a11y-check skips contrast when a palette carries no matching color token', () => {
   // The tool lints arbitrary HTML, not only generator output: an input that
   // declares --page-bg but no --text-color (or vice versa) must skip that
