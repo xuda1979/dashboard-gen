@@ -270,11 +270,12 @@ test('a11y-check linearizes a black channel with the low-value luminance branch'
 });
 
 test('a11y-check fails when a chart figure declares role="img" without an accessible name', () => {
-  // Charts expose their SVG as role="img", so the embedded figure must carry an
-  // accessible name (aria-label or aria-labelledby). The renderer always emits
-  // aria-label="(caption || title)", but the lint accepts arbitrary HTML, so a
-  // hand-written page whose chart figure omits the label must fail. A stale
-  // data-chart-caption attribute is not a substitute — only aria labels count.
+  // Elements exposed as role="img" must carry an accessible name (aria-label or
+  // aria-labelledby). Chart figures, stat values and progress bars all carry
+  // the role, so the lint applies to every role="img" tag in the input — not
+  // just generator output. A hand-written page whose role="img" omits the label
+  // must fail. A stale data-chart-caption attribute is not a substitute — only
+  // aria labels count.
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-fig-'));
   const file = path.join(tmp, 'unnamed.html');
   fs.writeFileSync(
@@ -296,7 +297,7 @@ test('a11y-check fails when a chart figure declares role="img" without an access
   const res = runCheck(file);
   assert.strictEqual(res.ok, false, 'expected failure');
   assert.strictEqual(res.code, 1, 'exit code 1');
-  assert.match(res.stderr, /chart figure missing accessible name:/, 'reports the unnamed chart figure');
+  assert.match(res.stderr, /role="img" without an accessible name:/, 'reports the unnamed chart figure');
 
   // Companion figure that does carry aria-label must not produce that problem;
   // and a labelled figure keeps the page green on its own.
@@ -319,7 +320,57 @@ test('a11y-check fails when a chart figure declares role="img" without an access
   );
   const resGood = runCheck(good);
   assert.strictEqual(resGood.ok, true, 'a labelled chart figure passes');
-  assert.ok(!/chart figure missing accessible name/.test(resGood.stdout), 'no missing-name problem on stdout');
+  assert.ok(!/role="img" without an accessible name/.test(resGood.stdout), 'no missing-name problem on stdout');
+});
+
+test('a11y-check rejects any role="img" element missing an accessible name', () => {
+  // The role="img" rule is not chart-figure-specific: stat values, stat
+  // progress bars and SVG chart roots all expose themselves as role="img" with
+  // an aria-label, so a bare role="img" (hand-written or from a future
+  // component) with no name must fail the same rule. aria-labelledby counts as
+  // a name too; only a truly nameless role="img" fails.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-bareimg-'));
+  const bare = path.join(tmp, 'bare.html');
+  fs.writeFileSync(
+    bare,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main">
+    <div class="dg-stat-progress" role="img" style="width: 50%"></div>
+  </main>
+</body>
+</html>`
+  );
+  const resBare = runCheck(bare);
+  assert.strictEqual(resBare.ok, false, 'a nameless role="img" element fails the check');
+  assert.strictEqual(resBare.code, 1, 'exit code 1');
+  assert.match(resBare.stderr, /role="img" without an accessible name:/, 'reports the bare role="img" tag');
+  assert.ok(!/chart figure missing accessible name/.test(resBare.stderr), 'message no longer chart-specific');
+
+  // The same element carries an accessible name via aria-labelledby -> passes.
+  const byid = path.join(tmp, 'byid.html');
+  fs.writeFileSync(
+    byid,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main">
+    <span id="b-label">Battery level</span>
+    <div class="dg-stat-progress" role="img" aria-labelledby="b-label" style="width: 50%"></div>
+  </main>
+</body>
+</html>`
+  );
+  const resById = runCheck(byid);
+  assert.strictEqual(resById.ok, true, 'aria-labelledby satisfies the accessible-name rule');
+  assert.ok(!/without an accessible name/.test(resById.stdout), 'no missing-name problem on stdout');
 });
 
 test('a11y-check skips contrast when a palette carries no matching color token', () => {

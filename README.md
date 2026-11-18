@@ -126,8 +126,8 @@ chart data rebuilds the page without touching the DSL.
 
 Generated pages include a skip link, `lang`, a single `<main id="main">`
 landmark, a labelled `<nav>`, semantic tables (`scope="col"`/`scope="row"`),
-and charts carry `role="img"` with accessible names. Lint any artifact, or
-fold the same checks into the build:
+and every `role="img"` element (charts, stat values, progress bars) carries an
+accessible name. Lint any artifact, or fold the same checks into the build:
 
 ```sh
 node scripts/a11y-check.mjs dist/chart.html
