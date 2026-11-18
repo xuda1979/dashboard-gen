@@ -34,8 +34,9 @@ test('dashboard runbook section exercises the remaining component library', () =
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
   // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
-  // footnote, and image — the components no other example uses — so the
-  // canonical DSL proves the full 24-component library renders in one page.
+  // footnote, timeline, and image — the components no other example uses —
+  // so the canonical DSL proves the full 25-component library renders in one
+  // page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -100,6 +101,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<aside class="dg-footnote" role="doc-footnote" aria-label="Footnote">Incident windows and datapoints above are illustrative; the rollback checklist reflects the internal runbook as of this revision\.<\/aside>/,
     'runbook ends on a small-print footnote'
+  );
+  assert.match(
+    html,
+    /<div class="dg-timeline"><div class="dg-timeline-title">Incident timeline<\/div><ul class="dg-timeline-list"><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="09:14">09:14<\/time><span class="dg-timeline-text">Alert fires on elevated billing-queue lag<\/span><\/li><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="09:17">09:17<\/time><span class="dg-timeline-text">On-call acknowledges and pages the owner<\/span><\/li><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="09:32">09:32<\/time><span class="dg-timeline-text">Rollback of billing-worker released<\/span><\/li><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="09:41">09:41<\/time><span class="dg-timeline-text">Healthz green; queue drains to zero<\/span><\/li><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="10:05">10:05<\/time><span class="dg-timeline-text">Incident window closed<\/span><\/li><\/ul><\/div>/,
+    'runbook shows the incident window as a time-stamped timeline'
   );
 });
 
@@ -1819,6 +1825,75 @@ test('footnote renders a small-print end note with the doc-footnote role', () =>
   const missing = renderHtml({ title: 'footnote', sections: [{ content: [{ type: 'footnote' }] }] });
   assert.ok(!missing.includes('<aside class="dg-footnote"'), 'missing text renders nothing');
 });
+
+test('timeline renders a time-stamped chronological event log', () => {
+  // A timeline is a vertical log of { time, text } entries; a machine-readable
+  // stamp becomes a semantic <time> (so assistive tech can cite the instant),
+  // anything else stays inert text. The optional `title` heads the list.
+  const html = renderHtml({
+    title: 'timeline',
+    sections: [{ content: [{ type: 'timeline', title: 'Incident', items: [
+      { time: '09:14', text: 'Alert fires' },
+      { time: '9:05:07', text: 'With seconds' },
+      { time: '2026-11-17T09:17:00Z', text: 'Acknowledged' },
+      { time: '2026-11-18', text: 'Bare date' },
+      { time: 'soon', text: 'Window closes' },
+      'No stamp entry',
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<div class="dg-timeline"><div class="dg-timeline-title">Incident<\/div><ul class="dg-timeline-list">[\s\S]*<time class="dg-timeline-time" datetime="09:14">09:14<\/time><span class="dg-timeline-text">Alert fires<\/span><\/li>[\s\S]*<time class="dg-timeline-time" datetime="09:05:07">9:05:07<\/time><span class="dg-timeline-text">With seconds<\/span><\/li>[\s\S]*<time class="dg-timeline-time" datetime="2026-11-17T09:17:00Z">2026-11-17T09:17:00Z<\/time><span class="dg-timeline-text">Acknowledged<\/span><\/li>[\s\S]*<time class="dg-timeline-time" datetime="2026-11-18">2026-11-18<\/time><span class="dg-timeline-text">Bare date<\/span><\/li>[\s\S]*<span class="dg-timeline-time">soon<\/span><span class="dg-timeline-text">Window closes<\/span><\/li>[\s\S]*<li class="dg-timeline-item"><span class="dg-timeline-text">No stamp entry<\/span><\/li>[\s\S]*<\/ul><\/div>/,
+    'timeline renders title, semantic <time> stamps, inert-text stamps, and unstamped strings'
+  );
+  // No title -> the list stands alone without a heading div.
+  const bare = renderHtml({
+    title: 'timeline',
+    sections: [{ content: [{ type: 'timeline', items: [{ time: '10:05', text: 'Closed' }] }] }],
+  });
+  assert.match(
+    bare,
+    /<div class="dg-timeline"><ul class="dg-timeline-list"><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="10:05">10:05<\/time><span class="dg-timeline-text">Closed<\/span><\/li><\/ul><\/div>/,
+    'timeline renders with a default aria-label and text'
+  );
+});
+
+test('timeline escapes entries, drops blanks, and degrades to nothing', () => {
+  // User text (time and body) is escaped; blank bodies, non-object scalars,
+  // a whitespace-only body, and all-empty/missing items render nothing rather
+  // than dead markup or a "null" literal.
+  const html = renderHtml({
+    title: 'timeline',
+    sections: [{ content: [{ type: 'timeline', items: [
+      { time: '09:00', text: 'Page <ops> & fleet' },
+      { time: '09:01', text: '  ' },
+      { time: '09:02', text: '' },
+      42,
+      null,
+      { text: 'Unstamped <event>' },
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<time class="dg-timeline-time" datetime="09:00">09:00<\/time><span class="dg-timeline-text">Page &lt;ops&gt; &amp; fleet<\/span>/,
+    'time and body text are escaped'
+  );
+  assert.match(
+    html,
+    /<li class="dg-timeline-item"><span class="dg-timeline-text">Unstamped &lt;event&gt;<\/span><\/li>/,
+    'object without time renders an unstamped entry'
+  );
+  const entries = html.match(/class="dg-timeline-item"/g) || [];
+  assert.strictEqual(entries.length, 2, 'blank bodies and scalar items are dropped');
+  const noItems = renderHtml({ title: 'timeline', sections: [{ content: [{ type: 'timeline' }] }] });
+  assert.ok(!noItems.includes('<ul class="dg-timeline-list"'), 'missing items render no timeline');
+  const allBlank = renderHtml({
+    title: 'timeline',
+    sections: [{ content: [{ type: 'timeline', items: [{ time: '09:00', text: ' ' }, ''] }] }],
+  });
+  assert.ok(!allBlank.includes('<ul class="dg-timeline-list"'), 'all-blank items render no timeline');
+});
+
 
 test('fallbacks: card title object, headline level, badge tone', () => {
   // card `title` may be { text }; headline `level` outside 1-6 falls back to

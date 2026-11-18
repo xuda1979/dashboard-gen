@@ -188,6 +188,15 @@ sections:
             delta: { value: 0, tone: neutral }
           - { label: Open incidents, prefix: "#", value: 2, delta: { value: 1, tone: bad } }
 
+      - type: timeline
+        title: Incident timeline
+        items:
+          - { time: "09:14", text: Alert fires on elevated billing-queue lag }
+          - { time: "09:17", text: On-call acknowledges and pages the owner }
+          - { time: "09:32", text: Rollback of billing-worker released }
+          - { time: "09:41", text: Healthz green; queue drains to zero }
+          - { time: "10:05", text: Incident window closed }
+
       - type: checklist
         items:
           - { text: Billing-queue drained, done: true }
