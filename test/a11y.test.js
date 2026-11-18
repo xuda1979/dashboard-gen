@@ -155,7 +155,7 @@ test('a11y-check rejects any <nav> landmark lacking an aria-label', () => {
   <a class="skip-link" href="#main">Skip</a>
   <nav aria-label="Primary"><a href="#s">S</a></nav>
   <nav class="dg-breadcrumbs" aria-label="Breadcrumb"><ol><li>Home</li></ol></nav>
-  <main id="main"><h2>Top</h2></main>
+  <main id="main"><h2 id="s">Top</h2></main>
 </body>
 </html>`
   );
@@ -226,13 +226,72 @@ test('a11y-check rejects pages with duplicate id attributes', () => {
 <body>
   <a class="skip-link" href="#main">Skip</a>
   <nav aria-label="Main"><a href="#s">S</a></nav>
-  <main id="main"><h2 id="h">Top</h2></main>
+  <main id="main"><h2 id="s">Top</h2><h2 id="h">Sub</h2></main>
 </body>
 </html>`
   );
   const resUnique = runCheck(unique);
   assert.strictEqual(resUnique.ok, true, 'all-unique ids (and script-body strings) pass');
   assert.ok(!/duplicate id=/.test(resUnique.stdout), 'no duplicate-id problem on stdout');
+});
+
+test('a11y-check rejects dangling idrefs that resolve to no element id', () => {
+  // Every id reference in the DOM — a fragment URL (href="#..."), a <label>
+  // for, an aria-labelledby/aria-describedby/aria-controls token — must point
+  // at an id an element actually declares. A reference to nothing resolves to
+  // no element at all instead of exactly one, breaking fragment links, label
+  // associations, and ARIA relations, so the lint must fail and name the
+  // missing target. Script bodies are ignored, as in the duplicate-id check.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-idref-'));
+  const bad = path.join(tmp, 'bad.html');
+  fs.writeFileSync(
+    bad,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main">
+    <a href="#ghost">missing</a>
+    <label for="ghost-input">missing</label>
+    <input id="in" aria-describedby="ghost-note">
+  </main>
+</body>
+</html>`
+  );
+  const resBad = runCheck(bad);
+  assert.strictEqual(resBad.ok, false, 'a dangling idref fails the check');
+  assert.strictEqual(resBad.code, 1, 'exit code 1');
+  assert.match(resBad.stderr, /idref "#ghost" does not resolve to an element id/, 'names the dangling target');
+  assert.match(resBad.stderr, /idref "#ghost-input"/, 'also flags the dangling label for');
+  assert.match(resBad.stderr, /idref "#ghost-note"/, 'also flags the dangling aria token');
+
+  // Every reference resolving — including fragment URLs and aria/id tokens that
+  // all land — must pass; a #-string inside a script body is not a DOM idref.
+  const good = path.join(tmp, 'good.html');
+  fs.writeFileSync(
+    good,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title>
+<script>const ref = 'href="#s-overview"';</script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main">
+    <h2 id="s">Section</h2>
+    <label for="in">Field</label>
+    <input id="in" aria-describedby="note">
+    <p id="note">help</p>
+  </main>
+</body>
+</html>`
+  );
+  const resGood = runCheck(good);
+  assert.strictEqual(resGood.ok, true, 'all resolving idrefs pass');
+  assert.ok(!/does not resolve to an element id/.test(resGood.stdout), 'no dangling-idref problem on stdout');
 });
 
 test('a11y-check fails when the page theme has insufficient contrast', () => {
@@ -331,13 +390,13 @@ test('a11y-check warns (not fails) on heading skips, external assets, and non-he
   };
 
   // h2 followed directly by h4 skips a level; warning only.
-  const skip = writePage('<h2>Top</h2><h4>Skipped</h4>');
+  const skip = writePage('<h2 id="s">Top</h2><h4>Skipped</h4>');
   const resSkip = runCheck(skip);
   assert.strictEqual(resSkip.ok, true, 'heading skip does not fail the page');
   assert.match(resSkip.stdout, /heading level skip from h2 to h4/, 'reports the skipped level');
 
   // A page that pulls in external css/js (the offline requirement) passes with a note.
-  const ext = writePage('<h2>Top</h2>', '<link rel="stylesheet" href="base.css"><script src="app.js"></script>');
+  const ext = writePage('<h2 id="s">Top</h2>', '<link rel="stylesheet" href="base.css"><script src="app.js"></script>');
   const resExt = runCheck(ext);
   assert.strictEqual(resExt.ok, true, 'external assets do not fail the page');
   assert.match(resExt.stdout, /found external script\/style\/img resource/, 'notes the offline requirement');
@@ -429,6 +488,7 @@ test('a11y-check fails when a chart figure declares role="img" without an access
   <a class="skip-link" href="#main">Skip</a>
   <nav aria-label="Main"><a href="#s">S</a></nav>
   <main id="main">
+    <h2 id="s">Top</h2>
     <div class="dg-figure dg-chart" role="img" aria-label="Requests / minute">
       <svg>...</svg>
     </div>
@@ -480,6 +540,7 @@ test('a11y-check rejects any role="img" element missing an accessible name', () 
   <a class="skip-link" href="#main">Skip</a>
   <nav aria-label="Main"><a href="#s">S</a></nav>
   <main id="main">
+    <h2 id="s">Top</h2>
     <span id="b-label">Battery level</span>
     <div class="dg-stat-progress" role="img" aria-labelledby="b-label" style="width: 50%"></div>
   </main>
@@ -533,6 +594,7 @@ test('a11y-check rejects a <th> that declares no scope', () => {
   <a class="skip-link" href="#main">Skip</a>
   <nav aria-label="Main"><a href="#s">S</a></nav>
   <main id="main">
+    <h2 id="s">Top</h2>
     <table>
       <tr><th scope="col">Name</th><th scope="col">Value</th></tr>
       <tr><th scope="row">Alpha</th><td>1</td></tr>
@@ -565,7 +627,7 @@ test('a11y-check skips contrast when a palette carries no matching color token',
 <body>
   <a class="skip-link" href="#main">Skip</a>
   <nav aria-label="Main"><a href="#s">S</a></nav>
-  <main id="main"><h2>Top</h2></main>
+  <main id="main"><h2 id="s">Top</h2></main>
 </body>
 </html>`
   );

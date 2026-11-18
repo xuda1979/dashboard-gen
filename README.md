@@ -135,9 +135,10 @@ Generated pages include a skip link, `lang`, a single `<main id="main">`
 landmark, every `<nav>` landmark labelled (auto nav, table of contents,
 breadcrumbs), semantic tables (`scope="col"`/`scope="row"`),
 every `role="img"` element (charts, stat values, progress bars) carries an
-accessible name, and all `id` attributes are unique (skip link, section
-anchors, tab radios). Lint any artifact, or fold the same checks into the
-build:
+accessible name, all `id` attributes are unique (skip link, section
+anchors, tab radios), and every id reference (fragment links, label `for`,
+ARIA relations) resolves to an existing element. Lint any artifact, or fold
+the same checks into the build:
 
 ```sh
 node scripts/a11y-check.mjs dist/chart.html
