@@ -13,7 +13,7 @@
   开发完成日期：2026年11月
   首次发表日期：未发表
   开发方式：    独立开发
-  著作权人：    xuda1979
+  著作权人：    许达（工作单位：中国移动研究院）
 
   软件作品说明：
     本软件为一个声明式仪表板/落地页生成器。用户以 YAML 或 JSON 编写描述页面
@@ -27,14 +27,14 @@
 二、权利信息
 ────────────────────────────────────────────────────
 
-  著作权人名称：xuda1979
+  著作权人名称：许达（工作单位：中国移动研究院）
   著作权人类型：自然人
   权利取得方式：原始取得
   权利范围：    全部权利（发表权、署名权、修改权、保护作品完整权、复制权、
                 发行权、信息网络传播权等）
 
   独立开发声明：
-    本人（xuda1979）声明：本软件由本人独立自主开发完成，全部源程序、文档及
+    本人（许达）声明：本软件由本人独立自主开发完成，全部源程序、文档及
     图表运行逻辑均为本人原创，未抄袭、复制或改编任何第三方受法律保护的软件
     作品或程序代码，未侵犯任何第三方的软件著作权、专利权、商标权等合法权益；
     开发过程中所使用的第三方已成为公共领域的通用语法（如 YAML、JSON、SVG、
@@ -46,7 +46,7 @@
 ────────────────────────────────────────────────────
 
   编程语言：    JavaScript（Node.js ≥ 22，CommonJS 模块）
-  源程序总行数：1593 行（已去除注释与空行；各源文件有效行数合计，
+  源程序总行数：2661 行（已去除注释与空行；各源文件有效行数合计，
                 详见附带《源代码》文档文档首说明）
 
   开发环境：
@@ -74,9 +74,12 @@
 ────────────────────────────────────────────────────
 
   1. 声明式页面模型（DSL）：支持 5 种页面布局（hero/grid/sidebar/
-     section/landing）与 13 种组件（headline、paragraph、list、button、
-     link、card、stat、badge、divider、quote、grid、table、chart），
-     支持主题令牌（accent、radius 等）与深色模式。
+     section/landing）与 34 种组件（headline、paragraph、list、steps、
+     button、link、card、stat、stat-list、toc、badge、divider、quote、
+     code、callout、kv、grid、table、chart、image、details、tabs、
+     checklist、footnote、timeline、def-list、stepper、sparkline、status、
+     heatmap、progress、terminal、gauge、breadcrumbs），支持主题令牌
+     （accent、radius 等）与深色模式。
   2. 单文件静态生成：输入 DSL → 输出自包含 HTML，内联 CSS 与 SVG 图表
      runtime，零 CDN、零外部依赖、可离线打开。
   3. 内置图表组件：line / bar / pie 三类 SVG 图表，基于内嵌数据于浏览器
@@ -113,4 +116,4 @@
   登记日期：    （本栏留空，由著作权登记机构填写）
 
   申请日期：    2026年11月16日
-  申请人签章：  xuda1979
+  申请人签章：  许达

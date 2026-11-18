@@ -5,7 +5,7 @@ software-copyright application: design specification
 (system design specification, GB/T 8567-2006)
 
 软件名称：dashboard-gen V1.0
-著作权人：xuda1979
+著作权人：许达（工作单位：中国移动研究院）
 编写日期：2026年11月
 文件版本：V1.0
 
@@ -33,7 +33,7 @@ software-copyright application: design specification
              页面结构的 YAML / JSON 文档，包含 title、layout、theme、hero、
              nav、sections 等根级字段。
   组件       构成页面内容的最小单元，如 headline（标题）、paragraph（段落）、
-             chart（图表）等，共 13 种。
+             chart（图表）等，共 34 种。
   布局       页面内容组织方式：hero / grid / sidebar / section / landing。
   数据绑定   将图表组件的数据来源解析并绑定到渲染结果的过程；数据可内嵌于
              DSL，亦可来自构建期文件或运行期只读拉取。
@@ -48,7 +48,7 @@ software-copyright application: design specification
   软件以「输入 DSL → 输出单文件静态 HTML」为总目标，需满足如下功能：
   a) 解析并校验 YAML / JSON 格式的 DSL；
   b) 依据 layout 组装页面骨架（hero / nav / 内容区 / 页脚）；
-  c) 渲染 13 种组件，包括 stat、table 与 line/bar/pie 图表；
+  c) 渲染 34 种组件，包括 stat、table 与 line/bar/pie 图表；
   d) 支持内嵌数据、文件数据（file:）与运行期拉取数据（fetch:/self://）；
   e) 输出零外部依赖的自包含 HTML，内嵌 CSS 令牌与图表运行时；
   f) 提供命令行工具 dg new/build/watch/serve 与 GitHub Pages 部署工作流；
@@ -102,7 +102,7 @@ software-copyright application: design specification
   │                 │ Parse 各子类，携带定位路径）                   │
   │ lib/loader.js   │ DSL 解析（YAML/JSON 探测与 parse）与页面级校验  │
   │ lib/build.js    │ 构建总线：parse→validate→render 串联          │
-  │ lib/components.js│ 13 种组件的 HTML 片段渲染器 + 转义工具        │
+  │ lib/components.js│ 34 种组件的 HTML 片段渲染器 + 转义工具        │
   │ lib/render.js   │ 页面骨架装配、图表数据收集/绑定、内嵌运行时、   │
   │                 │ fetch 规格收集、布局主题解析                   │
   │ lib/style.js    │ BASE_CSS 静态样式常量（含图表/表格/卡片样式）  │
@@ -194,7 +194,7 @@ software-copyright application: design specification
     输出 <table> 结构：表头 th scope="col"，无表头时首列 th scope="row"，
     包于 .dg-scroll 横向滚动容器，可选 aria-label（caption）。
   3.2.4 chart 组件（renderChart）
-    仅输出图表宿主壳（placeholder）：带 data-chart-type/title/data/source/
+    仅输出图表宿主容器：带 data-chart-type/title/data/source/
     swatches/start 属性与 role="img"、aria-label 的 <div class="dg-figure">，
     实际 SVG 由内嵌运行时在浏览器端绘制（见 3.5）。
 
@@ -269,7 +269,7 @@ software-copyright application: design specification
     并生成图例（色块+标签+值）。
   3.5.5 数据缺失说明
     当 store 无数据 / fetch 失败 / 数据为空时，容器内渲染
-    「No data to draw」错误占位（.dg-error 样式），保证页面结构完整。
+    「No data to draw」提示（.dg-error 样式），保证页面结构完整。
 
 3.6 命令行与安全（lib/cli.js）
   3.6.1 serve 静态服务安全设计（关键）
@@ -287,4 +287,3 @@ software-copyright application: design specification
   对产物 HTML 做正则/字符串级静态断言：跳过链接、lang 属性、main 唯一、
   nav 标签、表格 scope 属性、图表 role="img" 与 aria-label 等；缺失
   任一规则即以非零退出码报告，供 CI 或人工校验使用。
-EOF

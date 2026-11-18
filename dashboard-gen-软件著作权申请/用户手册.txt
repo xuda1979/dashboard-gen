@@ -5,7 +5,7 @@ software-copyright application: user manual
 (user manual, GB/T 8567-2006)
 
 软件名称：dashboard-gen V1.0
-著作权人：xuda1979
+著作权人：许达（工作单位：中国移动研究院）
 编写日期：2026年11月
 文件版本：V1.0
 
@@ -34,8 +34,11 @@ software-copyright application: user manual
   dg          dashboard-gen 与命令的通用简称（如 dg build）。
   DSO         页面描述文件（如 dg.dsl.yaml、site.yaml），即 DSL 源文件。
   layout      页面布局：hero / grid / sidebar / section / landing 五种。
-  component   页面组件：headline、paragraph、list、button、link、card、
-              stat、badge、divider、quote、grid、table、chart 共 13 种。
+  component   页面组件：headline、paragraph、list、steps、button、link、
+              card、stat、stat-list、toc、badge、divider、quote、code、
+              callout、kv、grid、table、chart、image、details、tabs、
+              checklist、footnote、timeline、def-list、stepper、sparkline、
+              status、heatmap、progress、terminal、gauge、breadcrumbs 共 34 种。
   fetch       图表数据在页面打开时从指定 URL 只读拉取的机制。
   fixture     构建时被复制到产物旁的静态数据文件（如 market.json）。
 
@@ -166,7 +169,7 @@ software-copyright application: user manual
 3.7 可访问性自检（scripts/a11y-check.mjs）
   用途：对生成产物做静态可访问性检查。
   命令：
-        node scripts/a11y-check.mjs dist/xxx.html
+        node scripts/a11y-check.mjs dist/index.html
   检查项（节选）：跳过链接、lang、唯一 main 地标、nav 标签、表格
   scope="col"/"row"、图表 role="img" 与 aria-label 等；任一缺失将以
   非零退出码报告。
