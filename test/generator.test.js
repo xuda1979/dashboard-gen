@@ -2966,6 +2966,10 @@ test('stat component renders KPI value, label, prefix/suffix, delta and progress
   };
   const html = renderHtml(doc);
   assert.match(html, /class="dg-stat"/);
+  // The role="img" wrapper spells its data in the accessible name (label,
+  // prefixed value, delta trend, progress) so children presentational to
+  // assistive tech still announce the full figure — matching gauge/progress.
+  assert.match(html, /class="dg-stat" role="img" aria-label="Requests\/min: ~1180\/m, ▲ 12.4, 73%"/);
   assert.match(html, /class="dg-stat-value"[^>]*>~1180\/m</);
   assert.match(html, /class="dg-stat-label"[^>]*>Requests\/min</);
   assert.match(html, /class="dg-stat-delta dg-stat-delta--good"[^>]*>▲ 12.4</);
@@ -3059,8 +3063,8 @@ test('stat drops non-numeric delta/progress and clamps progress to 0-100', () =>
 test('stat falls back to title label and to a bare stat aria-label', () => {
   // components.js renderStat: the figure label is `c.label || c.title || ''`.
   // A stat given only a `title:` uses it as the label, and one with neither
-  // still renders with the accessible name "stat" and an empty label line
-  // instead of an unlabeled figure.
+  // still renders with the accessible name "stat" (the name always includes
+  // the value) and an empty label line instead of an unlabeled figure.
   const html = renderHtml({
     title: 'stat-labels',
     sections: [{
@@ -3070,9 +3074,9 @@ test('stat falls back to title label and to a bare stat aria-label', () => {
       ],
     }],
   });
-  assert.match(html, /class="dg-stat" role="img" aria-label="Sessions"/);
+  assert.match(html, /class="dg-stat" role="img" aria-label="Sessions: 12"/);
   assert.match(html, /class="dg-stat-label">Sessions<\/div>/);
-  assert.match(html, /class="dg-stat" role="img" aria-label="stat"/);
+  assert.match(html, /class="dg-stat" role="img" aria-label="99"/);
   assert.match(html, /class="dg-stat-label"><\/div>/);
 });
 
@@ -3121,7 +3125,7 @@ test('grid cells render any full component object via item.type', () => {
       }],
     }],
   });
-  assert.match(html, /<div class="dg-cell"><div class="dg-stat" role="img" aria-label="Rate">/, 'stat component renders inside the cell');
+  assert.match(html, /<div class="dg-cell"><div class="dg-stat" role="img" aria-label="Rate: 42">/, 'stat component renders inside the cell');
   assert.match(html, /<div class="dg-cell"><button type="button" class="dg-btn dg-btn--primary">Go<\/button><\/div>/, 'button component renders inside the cell');
   assert.match(html, /<div class="dg-cell"><span class="dg-badge dg-badge--success">stable<\/span><\/div>/, 'badge component renders inside the cell');
 });
