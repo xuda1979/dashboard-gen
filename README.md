@@ -107,6 +107,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `sparkline`  | `data` (numbers, `[label, value]`/`[value]`, `{value}`/`{label, value}` — build-time SVG trend), `title`, `caption` |
 | `status`     | `items[]` (string or `{name, state, detail}` — service-health list; states healthy/degraded/down/maintenance), `title` |
 | `heatmap`    | `columns[]`, `rows[]` (string or `{label, values}`) / `data` matrix — intensity grid, every cell textual, Low→High legend, `title` |
+| `progress`   | `value` (0-100, labelless standalone), `label`/`title`, `tone` (primary/success/warning/danger — labelled completion bar, percent always visible text) |
 
 ## Data binding
 

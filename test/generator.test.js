@@ -34,9 +34,9 @@ test('dashboard runbook section exercises the remaining component library', () =
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
   // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
-  // footnote, timeline, def-list, stepper, image, sparkline, status, and
-  // heatmap — the components no other example uses — so the canonical DSL
-  // proves the full 30-component library renders in one page.
+  // footnote, timeline, def-list, stepper, image, sparkline, status,
+  // heatmap, and progress — the components no other example uses — so the
+  // canonical DSL proves the full 31-component library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -2276,6 +2276,39 @@ test('heatmap with no rows or columns renders nothing', () => {
     sections: [{ content: [{ type: 'heatmap', title: 'Skip & <me>', columns: ['a'], rows: [{ label: 'z', values: [4] }] }] }],
   });
   assert.match(title, /<div class="dg-heatmap-title">Skip &amp; &lt;me&gt;<\/div>/, 'title escapes');
+});
+
+test('progress renders a labelled completion bar with spellable percent text', () => {
+  // Progress is the standalone sibling of stat's progress strip: the wrapper
+  // is role="img" with the label + percent as its accessible name (a11y check
+  // 6), the percent is visible text beside the fill, and width/tone are
+  // decoration rather than the only cue — so a colorblind reader still gets
+  // the value.
+  const html = renderHtml({
+    title: 'progress',
+    sections: [{ content: [{ type: 'progress', label: 'Error budget', value: 72, tone: 'success' }] }],
+  });
+  assert.match(
+    html,
+    /<div class="dg-progress" role="img" aria-label="Error budget: 72%">\n<div class="dg-progress-label">Error budget<\/div>\n<div class="dg-progress-track"><span class="dg-progress-fill dg-progress-fill--success" style="width:72%"><\/span><\/div>\n<div class="dg-progress-value">72%<\/div>\n<\/div>/,
+    'labelled bar carries its label, a success fill at 72% width, and the percent as visible text'
+  );
+});
+
+test('progress clamps, falls back tone, and degrades away', () => {
+  const html = renderHtml({
+    title: 'progress',
+    sections: [{ content: [
+      { type: 'progress', label: 'Over', value: 140, tone: 'bogus' },
+      { type: 'progress', value: -5 },
+      { type: 'progress', label: 'No value' },
+      { type: 'progress', label: 'Text', value: 'nightly' },
+    ] }],
+  });
+  assert.match(html, /aria-label="Over: 100%"[\s\S]*style="width:100%"/, 'over-flow values clamp to 100');
+  assert.match(html, /class="dg-progress-fill dg-progress-fill--primary"[\s\S]*<div class="dg-progress-value">0%<\/div>/, 'unknown tone falls back to primary and under-flow clamps to 0');
+  const valueRows = (html.match(/<div class="dg-progress-value">([^<]*)<\/div>/g) || []);
+  assert.deepEqual(valueRows, ['<div class="dg-progress-value">100%</div>', '<div class="dg-progress-value">0%</div>'], 'missing or non-finite values render no bar');
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {

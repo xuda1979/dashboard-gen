@@ -108,6 +108,19 @@ sections:
           - label: Fri
             values: [0, 0, 0, 1, 0, 1, 1, 0]
 
+      - type: progress
+        label: Error budget remaining
+        value: 72
+        tone: success
+      - type: progress
+        label: Storage utilization
+        value: 91
+        tone: danger
+      - type: progress
+        label: Build queue depth
+        value: 38
+        tone: warning
+
   - title: Releases
     content:
       - type: table
