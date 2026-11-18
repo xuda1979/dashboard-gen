@@ -2469,6 +2469,28 @@ test('breadcrumbs honour a custom label, escape hrefs, and degrade away', () => 
   assert.strictEqual(trails.length, 1, 'empty, missing, or all-blank items render no breadcrumb nav');
 });
 
+test('breadcrumbs skip malformed non-string, non-object items', () => {
+  // Numbers, booleans, null, etc. are neither trail labels nor { label, href }
+  // objects; they must be dropped instead of leaking empty slots into the
+  // trail (previously an empty <li> span plus stray separator).
+  const html = renderHtml({
+    title: 'breadcrumbs',
+    sections: [{ content: [
+      { type: 'breadcrumbs', items: [7, false, null, 'Home', [1], { label: 'Docs', href: '#x' }] },
+    ] }],
+  });
+  assert.match(
+    html,
+    /<nav class="dg-breadcrumbs" aria-label="Breadcrumb"><ol class="dg-breadcrumbs-list"><li class="dg-breadcrumbs-item"><span class="dg-breadcrumbs-text">Home<\/span><\/li><li class="dg-breadcrumbs-item"><span class="dg-breadcrumbs-current" aria-current="page">Docs<\/span><\/li><\/ol><\/nav>/,
+    'valid items keep their slots and the final valid item is the current page'
+  );
+  assert.doesNotMatch(
+    html,
+    /dg-breadcrumbs-text"><\/span>/,
+    'no empty text span for dropped items'
+  );
+});
+
 test('fallbacks: card title object, headline level, badge tone', () => {
   // card `title` may be { text }; headline `level` outside 1-6 falls back to
   // h2; badge `tone` unknown falls back to neutral.
