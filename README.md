@@ -108,6 +108,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `status`     | `items[]` (string or `{name, state, detail}` — service-health list; states healthy/degraded/down/maintenance), `title` |
 | `heatmap`    | `columns[]`, `rows[]` (string or `{label, values}`) / `data` matrix — intensity grid, every cell textual, Low→High legend, `title` |
 | `progress`   | `value` (0-100, labelless standalone), `label`/`title`, `tone` (primary/success/warning/danger — labelled completion bar, percent always visible text) |
+| `terminal`   | `items[]` (string or `{text, level}` where level cmd/info/ok/warn/err), `title`, `prompt` (console transcript; levels spelled as visible text) |
 
 ## Data binding
 

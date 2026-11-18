@@ -280,3 +280,20 @@ sections:
       - type: footnote
         text: Incident windows and datapoints above are illustrative; the rollback
           checklist reflects the internal runbook as of this revision.
+
+      - type: terminal
+        title: Rollback session
+        prompt: "$"
+        items:
+          - level: cmd
+            text: dg deploy --service billing-worker --rev 2143
+          - level: info
+            text: "Fetching release 2143 from registry..."
+          - level: ok
+            text: Canary at 2% for 5 minutes — healthz green
+          - level: warn
+            text: Error rate ticks to 0.1% during ramp
+          - level: ok
+            text: Rolled out to 100%; deploy complete
+          - level: err
+            text: "Failed: 0"

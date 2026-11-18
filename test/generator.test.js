@@ -35,8 +35,9 @@ test('dashboard runbook section exercises the remaining component library', () =
   // grid/stat/table/chart sections it now renders callout, steps, divider,
   // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
   // footnote, timeline, def-list, stepper, image, sparkline, status,
-  // heatmap, and progress — the components no other example uses — so the
-  // canonical DSL proves the full 31-component library renders in one page.
+  // heatmap, progress, and terminal — the components no other example uses —
+  // so the canonical DSL proves the full 32-component library renders in one
+  // page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -101,6 +102,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<aside class="dg-footnote" role="doc-footnote" aria-label="Footnote">Incident windows and datapoints above are illustrative; the rollback checklist reflects the internal runbook as of this revision\.<\/aside>/,
     'runbook ends on a small-print footnote'
+  );
+  assert.match(
+    html,
+    /<div class="dg-terminal" role="region" aria-label="Rollback session"><div class="dg-terminal-header"><span class="dg-terminal-title">Rollback session<\/span><\/div><pre class="dg-terminal-body"><span class="dg-terminal-line dg-terminal-line--cmd">\$ dg deploy --service billing-worker --rev 2143<\/span>/,
+    'runbook replays the rollback session as a titled terminal console'
   );
   assert.match(
     html,
@@ -2309,6 +2315,59 @@ test('progress clamps, falls back tone, and degrades away', () => {
   assert.match(html, /class="dg-progress-fill dg-progress-fill--primary"[\s\S]*<div class="dg-progress-value">0%<\/div>/, 'unknown tone falls back to primary and under-flow clamps to 0');
   const valueRows = (html.match(/<div class="dg-progress-value">([^<]*)<\/div>/g) || []);
   assert.deepEqual(valueRows, ['<div class="dg-progress-value">100%</div>', '<div class="dg-progress-value">0%</div>'], 'missing or non-finite values render no bar');
+});
+
+test('terminal renders a console transcript with prompt and leveled lines', () => {
+  // Terminal replays CLI output: command lines carry the prompt, ok/warn/err
+  // spell their level as visible uppercase tags (a11y check 6 — tone is
+  // decoration, not the sole signal), info lines are bare, and a title turns
+  // the whole block into a labelled region.
+  const html = renderHtml({
+    title: 'terminal',
+    sections: [{ content: [{ type: 'terminal', title: 'Rollback session', prompt: '$', items: [
+      { level: 'cmd', text: 'dg deploy --service billing-worker --rev 2143' },
+      { level: 'info', text: 'Fetching release 2143 from registry...' },
+      { level: 'ok', text: 'Canary at 2% — healthz green' },
+      { level: 'warn', text: 'Error rate ticks to 0.1% during ramp' },
+      { level: 'err', text: 'Failed: 0' },
+      'Plain trailing output',
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<div class="dg-terminal" role="region" aria-label="Rollback session"><div class="dg-terminal-header"><span class="dg-terminal-title">Rollback session<\/span><\/div><pre class="dg-terminal-body">/,
+    'titled terminal opens as a labelled region with a header'
+  );
+  assert.match(
+    html,
+    /<span class="dg-terminal-line dg-terminal-line--cmd">\$ dg deploy --service billing-worker --rev 2143<\/span>\n/,
+    'command lines carry the prompt verbatim'
+  );
+  assert.match(html, /<span class="dg-terminal-line dg-terminal-line--info">Fetching release 2143 from registry\.\.\.<\/span>/, 'info lines render bare');
+  assert.match(html, /<span class="dg-terminal-line dg-terminal-line--ok"><span class="dg-tl-tag">ok<\/span> Canary at 2% — healthz green<\/span>/, 'ok lines spell their level as a visible tag');
+  assert.match(html, /<span class="dg-terminal-line dg-terminal-line--warn"><span class="dg-tl-tag">warn<\/span> Error rate ticks to 0\.1% during ramp<\/span>/, 'warn lines spell warn');
+  assert.match(html, /<span class="dg-terminal-line dg-terminal-line--err"><span class="dg-tl-tag">err<\/span> Failed: 0<\/span>/, 'err lines spell err');
+  assert.match(html, /<span class="dg-terminal-line dg-terminal-line--info">Plain trailing output<\/span><\/pre><\/div>/, 'bare string items fall back to info lines');
+});
+
+test('terminal falls back levels, splits multiline text, escapes, and degrades away', () => {
+  const html = renderHtml({
+    title: 'terminal',
+    sections: [{ content: [
+      { type: 'terminal', title: 'R&B <log>', prompt: '>', items: [
+        { level: 'ERROR', text: '<warn> odd level' },
+        { level: '--flag', text: 'first line\nsecond line' },
+      ] },
+      { type: 'terminal' },
+      { type: 'terminal', items: [] },
+      { type: 'terminal', items: ['', '   ', null] },
+    ] }],
+  });
+  assert.match(html, /aria-label="R&amp;B &lt;log&gt;"/, 'title escapes');
+  assert.match(html, /<span class="dg-terminal-line dg-terminal-line--info">&lt;warn&gt; odd level<\/span>/, 'unknown level falls back to info and text escapes');
+  assert.match(html, /<span class="dg-terminal-line dg-terminal-line--info">first line<\/span>\n<span class="dg-terminal-line dg-terminal-line--info">second line<\/span>/, 'multiline text splits into one line per break');
+  const terminals = html.match(/class="dg-terminal"/g) || [];
+  assert.strictEqual(terminals.length, 1, 'missing, empty, or all-blank item lists render no terminal');
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {
