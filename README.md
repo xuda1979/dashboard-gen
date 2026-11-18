@@ -103,6 +103,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `footnote`   | `text`, `label` (small-print end note)                              |
 | `timeline`   | `items[]` (`{time, text}` — chronological event log), `title`        |
 | `def-list`   | `items[]` (`{key, value}` — plain definition list, no card band)     |
+| `stepper`    | `items[]` (string or `{text}` steps), `current` (0-based — step-marked progress) |
 
 ## Data binding
 

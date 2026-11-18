@@ -34,9 +34,9 @@ test('dashboard runbook section exercises the remaining component library', () =
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
   // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
-  // footnote, timeline, def-list, and image — the components no other example
-  // uses — so the canonical DSL proves the full 26-component library renders
-  // in one page.
+  // footnote, timeline, def-list, stepper, and image — the components no other
+  // example uses — so the canonical DSL proves the full 27-component library
+  // renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -111,6 +111,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<dl class="dg-def-list"><div class="dg-def-list-row"><dt>Window<\/dt><dd>2026-11-17 09:14–10:05<\/dd><\/div><div class="dg-def-list-row"><dt>Root cause<\/dt><dd>Billing-worker release 2144 regression<\/dd><\/div><div class="dg-def-list-row"><dt>Action<\/dt><dd>Rolled back; canary at 100% for 30 minutes<\/dd><\/div><\/dl>/,
     'runbook recaps the incident window in a plain definition list'
+  );
+  assert.match(
+    html,
+    /<ol class="dg-stepper"><li class="dg-stepper-item dg-stepper-item--done"><span class="dg-stepper-num">✓<\/span><span class="dg-stepper-text">Build and smoke-test the release candidate<\/span><\/li><li class="dg-stepper-item dg-stepper-item--done"><span class="dg-stepper-num">✓<\/span><span class="dg-stepper-text">Deploy to staging and verify health<\/span><\/li><li class="dg-stepper-item dg-stepper-item--current" aria-current="step"><span class="dg-stepper-num">3<\/span><span class="dg-stepper-text">Roll out to production at 2%<\/span><\/li><li class="dg-stepper-item dg-stepper-item--pending"><span class="dg-stepper-num">4<\/span><span class="dg-stepper-text">Monitor for 30 minutes before full traffic<\/span><\/li><\/ol>/,
+    'releases show a step-marked progress stepper (current: 2 marks 2 done, 1 active, 1 pending)'
   );
 });
 
@@ -1952,6 +1957,80 @@ test('def-list escapes text, drops blanks, and degrades to nothing', () => {
     sections: [{ content: [{ type: 'def-list', items: [{ key: ' ', value: '' }] }] }],
   });
   assert.ok(!allBlank.includes('<dl class="dg-def-list">'), 'all-blank items render no def-list');
+});
+
+test('stepper renders a step-marked progress bar from a 0-based current index', () => {
+  // Stepper fuses steps' chip numerals with a progress band: earlier steps are
+  // done, the `current` step is highlighted (aria-current), later steps stay
+  // pending — distinct from steps, which shows plain numbers with no state.
+  const html = renderHtml({
+    title: 'stepper',
+    sections: [{ content: [{ type: 'stepper', current: 1, items: [
+      'Build the release candidate',
+      'Deploy to staging and verify health',
+      'Roll out to production',
+      'Monitor before full traffic',
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<ol class="dg-stepper"><li class="dg-stepper-item dg-stepper-item--done"><span class="dg-stepper-num">✓<\/span><span class="dg-stepper-text">Build the release candidate<\/span><\/li><li class="dg-stepper-item dg-stepper-item--current" aria-current="step"><span class="dg-stepper-num">2<\/span><span class="dg-stepper-text">Deploy to staging and verify health<\/span><\/li><li class="dg-stepper-item dg-stepper-item--pending"><span class="dg-stepper-num">3<\/span><span class="dg-stepper-text">Roll out to production<\/span><\/li><li class="dg-stepper-item dg-stepper-item--pending"><span class="dg-stepper-num">4<\/span><span class="dg-stepper-text">Monitor before full traffic<\/span><\/li><\/ol>/,
+    'stepper marks done/current/pending by the current index'
+  );
+  assert.match(html, /class="dg-stepper"/, 'stepper reuses a numbered <ol> like steps');
+  const stepsHtml = renderHtml({
+    title: 'steps',
+    sections: [{ content: [{ type: 'steps', items: ['A', 'B', 'C'] }] }],
+  });
+  assert.match(stepsHtml, /<ol class="dg-steps">/, 'steps keeps its distinct renderer');
+  assert.ok(!stepsHtml.includes('<ol class="dg-stepper">'), 'steps render no progress state');
+});
+
+test('stepper escapes text, drops blanks, and degrades to nothing', () => {
+  const html = renderHtml({
+    title: 'stepper',
+    sections: [{ content: [{ type: 'stepper', current: 0, items: [
+      'A & B <team>',
+      '  ',
+      null,
+      undefined,
+      'Tail',
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<span class="dg-stepper-text">A &amp; B &lt;team&gt;<\/span>/,
+    'stepper escapes step text'
+  );
+  assert.match(
+    html,
+    /<li class="dg-stepper-item dg-stepper-item--current" aria-current="step"><span class="dg-stepper-num">1<\/span>/,
+    'current still resolves after leading blanks drop'
+  );
+  const items = html.match(/<li class="dg-stepper-item/g) || [];
+  assert.strictEqual(items.length, 2, 'only the non-blank tail survives');
+  const noItems = renderHtml({ title: 'stepper', sections: [{ content: [{ type: 'stepper', current: 0 }] }] });
+  assert.ok(!noItems.includes('<ol class="dg-stepper">'), 'missing items render no stepper');
+  const allBlank = renderHtml({
+    title: 'stepper',
+    sections: [{ content: [{ type: 'stepper', current: 0, items: [' ', ''] }] }],
+  });
+  assert.ok(!allBlank.includes('<ol class="dg-stepper">'), 'all-blank items render no stepper');
+});
+
+test('stepper without a valid current index renders a plain numbered stepper', () => {
+  for (const current of [undefined, -1, 9, '1', null]) {
+    const html = renderHtml({
+      title: 'stepper',
+      sections: [{ content: [{ type: 'stepper', current, items: ['One', 'Two'] }] }],
+    });
+    assert.match(
+      html,
+      /<ol class="dg-stepper"><li class="dg-stepper-item dg-stepper-item--pending"><span class="dg-stepper-num">1<\/span><span class="dg-stepper-text">One<\/span><\/li><li class="dg-stepper-item dg-stepper-item--pending"><span class="dg-stepper-num">2<\/span><span class="dg-stepper-text">Two<\/span><\/li><\/ol>/,
+      `current=${current} leaves every step pending`
+    );
+    assert.ok(!html.includes('aria-current'), 'no step claims the current position');
+  }
 });
 
 

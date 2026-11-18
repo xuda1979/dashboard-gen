@@ -87,6 +87,14 @@ sections:
           - [b27e01f, api-gateway, deployed]
           - [9c4d7e0, auth-service, deployed]
 
+      - type: stepper
+        current: 2
+        items:
+          - Build and smoke-test the release candidate
+          - Deploy to staging and verify health
+          - Roll out to production at 2%
+          - Monitor for 30 minutes before full traffic
+
   - title: Storage
     content:
       - type: chart
