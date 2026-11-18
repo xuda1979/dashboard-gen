@@ -33,8 +33,9 @@ test('landing example produces a single HTML page', () => {
 test('dashboard runbook section exercises the remaining component library', () => {
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
-  // quote, code, badge, kv, and image — the components no other example uses —
-  // so the canonical DSL proves the full 18-component library renders in one page.
+  // quote, code, badge, kv, details, and image — the components no other
+  // example uses — so the canonical DSL proves the full 19-component library
+  // renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -69,6 +70,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<figure class="dg-figure dg-image" aria-label="Ops Console status strip"><img src="data:image\/svg\+xml;utf8,.*" alt="Ops Console status strip"><figcaption class="dg-image-caption">Ops Console status strip<\/figcaption><\/figure>/,
     'runbook embeds the SVG asset as a data-URI image with a labelled figure'
+  );
+  assert.match(
+    html,
+    /<details class="dg-details"><summary class="dg-details-summary">Rollback checklist<\/summary>[\s\S]*<ul class="dg-ul"><li>Verify the rollback target is a known-good release<\/li>[\s\S]*<div class="dg-callout dg-callout--warning"><p class="dg-callout-body">The rollback check is never skipped\.<\/p>[\s\S]*<\/details>/,
+    'runbook folds the rollback checklist inside a closed details block'
   );
 });
 
@@ -1419,6 +1425,67 @@ test('image component verifies the asset exists and supports raster mimes', () =
   assert.throws(
     () => renderHtml({ title: 't', sections: [{ content: [{ type: 'image', alt: 'x' }] }] }, { fileDir }),
     (err) => err.name === 'DataFileError' && /image "file" must be a non-empty path/.test(err.message)
+  );
+});
+
+test('details renders a closed collapsible block and forwards nested components', () => {
+  const html = renderHtml({
+    title: 'details',
+    sections: [{
+      content: [{
+        type: 'details',
+        summary: 'Troubleshooting',
+        content: [
+          { type: 'paragraph', text: 'First line' },
+          { type: 'badge', tone: 'warning', text: 'Check logs' },
+        ],
+      }],
+    }],
+  });
+  assert.match(
+    html,
+    /<details class="dg-details"><summary class="dg-details-summary">Troubleshooting<\/summary>\n<div class="dg-details-body"><p class="dg-paragraph">First line<\/p>\n<span class="dg-badge dg-badge--warning">Check logs<\/span><\/div>\n<\/details>/,
+    'a closed details nests full components in its body'
+  );
+  assert.ok(!/dg-details open/.test(html), 'no open attribute by default');
+});
+
+test('details honors open, title alias, text body, string content, and empty defaults', () => {
+  const html = renderHtml({
+    title: 'details',
+    sections: [{
+      content: [
+        { type: 'details', title: 'Expanded', open: true, text: 'Plain body text.' },
+        { type: 'details', summary: 'Shorthand', content: ['Just a line'] },
+        { type: 'details', summary: 'Empty' },
+      ],
+    }],
+  });
+  assert.match(
+    html,
+    /<details class="dg-details" open><summary class="dg-details-summary">Expanded<\/summary>[\s\S]*<p class="dg-paragraph">Plain body text\.<\/p>/,
+    'open renders the attribute and text renders a paragraph body'
+  );
+  assert.match(
+    html,
+    /<summary class="dg-details-summary">Shorthand<\/summary>[\s\S]*<p class="dg-paragraph">Just a line<\/p>/,
+    'a string-only content array renders paragraph items'
+  );
+  assert.match(
+    html,
+    /<summary class="dg-details-summary">Empty<\/summary>\n<div class="dg-details-body"><p class="dg-paragraph">No content\.<\/p><\/div>/,
+    'an empty details falls back to a No content note'
+  );
+
+  // Neither summary nor title: the toggle defaults to "Details".
+  const dflt = renderHtml({
+    title: 'details',
+    sections: [{ content: [{ type: 'details', content: [{ type: 'badge', text: 'Tag' }] }] }],
+  });
+  assert.match(
+    dflt,
+    /<details class="dg-details"><summary class="dg-details-summary">Details<\/summary>[\s\S]*<span class="dg-badge dg-badge--neutral">Tag<\/span><\/div>\n<\/details>/,
+    'a missing summary/title falls back to the plain Details label'
   );
 });
 

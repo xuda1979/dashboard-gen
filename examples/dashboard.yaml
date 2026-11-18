@@ -145,6 +145,17 @@ sections:
           - { key: Region, value: eu-west-1 }
           - { key: Owner, value: Platform </team> }
 
+      - type: details
+        summary: Rollback checklist
+        content:
+          - type: list
+            items:
+              - Verify the rollback target is a known-good release
+              - Freeze deploys for the service before starting
+          - type: callout
+            tone: warning
+            text: The rollback check is never skipped.
+
       - type: image
         file: ops-console.svg
         caption: Ops Console status strip

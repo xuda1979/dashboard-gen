@@ -95,6 +95,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `table`      | `rows` (array-of-arrays or array-of-objects), `caption`, `header` |
 | `chart`      | `kind` (line/bar/pie), `title`, `caption`, `start`, `data`/`file`/`fetch` |
 | `image`      | `file` (path, inlined as data URI), `alt`, `caption`, `width`/`height` |
+| `details`    | `summary`/`title`, `content` (components or strings), `open`, `text` (collapsible block) |
 
 ## Data binding
 
