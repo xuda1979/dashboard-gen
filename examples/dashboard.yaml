@@ -196,6 +196,16 @@ sections:
             delta: { value: 0, tone: neutral }
           - { label: Open incidents, prefix: "#", value: 2, delta: { value: 1, tone: bad } }
 
+      - type: sparkline
+        title: Billing-queue lag
+        data:
+          - [09:14, 1200]
+          - [09:17, 860]
+          - [09:32, 410]
+          - [09:41, 90]
+          - [10:05, 0]
+        caption: Queue depth in the incident window
+
       - type: timeline
         title: Incident timeline
         items:

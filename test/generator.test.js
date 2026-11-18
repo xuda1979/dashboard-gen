@@ -34,9 +34,9 @@ test('dashboard runbook section exercises the remaining component library', () =
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
   // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
-  // footnote, timeline, def-list, stepper, and image — the components no other
-  // example uses — so the canonical DSL proves the full 27-component library
-  // renders in one page.
+  // footnote, timeline, def-list, stepper, image, and sparkline — the
+  // components no other example uses — so the canonical DSL proves the full
+  // 28-component library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -2033,6 +2033,85 @@ test('stepper without a valid current index renders a plain numbered stepper', (
   }
 });
 
+test('sparkline renders a build-time SVG trend from numeric row shapes', () => {
+  // Sparkline draws a static inline-SVG line + end dot at build time — no
+  // runtime hydration (unlike chart), with the figure labelled like a stat
+  // (role="img" + aria-label, a11y check 6) while the SVG stays decorative.
+  const html = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [
+      { type: 'sparkline', title: 'Requests', caption: 'Per minute', data: [3, 9, 6, 12] },
+    ] }],
+  });
+  assert.match(
+    html,
+    /<div class="dg-figure dg-sparkline" role="img" aria-label="Per minute">\n<div class="dg-sparkline-title">Requests<\/div>\n/,
+    'sparkline opens as a labelled figure with a title'
+  );
+  assert.match(
+    html,
+    /<svg class="dg-sparkline-svg" viewBox="0 0 100 32" aria-hidden="true" focusable="false">/,
+    'sparkline embeds a decorative build-time svg'
+  );
+  assert.match(
+    html,
+    /<path class="dg-sparkline-line" d="M 0 29L 33\.3 ([\d.]+)L 66\.7 ([\d.]+)L 100 ([\d.]+)"\/>/,
+    'four points draw a polyline across the full viewBox width'
+  );
+  assert.match(html, /<circle class="dg-sparkline-dot" cx="100" cy="([\d.]+)" r="2\.5"\/>/, 'end dot sits at the last point');
+  assert.match(html, /<p class="dg-note dg-sparkline-cap">Per minute<\/p>/, 'caption renders as a note line');
+});
+
+test('sparkline maps every chart value shape, centers a lone value, and degrades without data', () => {
+  const paired = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: [
+      ['Mon', 2], ['Tue', '5'], { label: 'Wed', value: 8 }, { value: 11 }, { label: 'Gap' }, [7],
+    ] }] }],
+  });
+  assert.match(
+    paired,
+    /<path class="dg-sparkline-line" d="M 0 ([\d.]+)L 25 ([\d.]+)L 50 ([\d.]+)L 75 ([\d.]+)L 100 ([\d.]+)"\/>/,
+    'pairs, strings, and { value } rows all plot as numbers'
+  );
+  assert.match(paired, /<circle class="dg-sparkline-dot" cx="100" /, 'multi-value series still draws its end dot');
+  const single = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', title: 'Ping', data: [42] }] }],
+  });
+  assert.match(single, /<circle class="dg-sparkline-dot" cx="50" cy="([\d.]+)" r="2\.5"\/>/, 'a single point centers horizontally');
+  assert.ok(!single.includes('class="dg-sparkline-line"'), 'a single point draws no line');
+
+  const noData = renderHtml({ title: 'sparkline', sections: [{ content: [{ type: 'sparkline', title: 'Delays' }] }] });
+  assert.match(noData, /<p class="dg-note">No data to draw\.<\/p>/, 'missing data shows the no-data note');
+  assert.ok(!noData.includes('class="dg-sparkline-svg"'), 'empty data renders no sparkline svg');
+  assert.match(noData, /aria-label="Delays"/, 'no-data figure keeps its accessible name');
+  const allBad = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: ['x', 'y', 'HC1'] }] }],
+  });
+  assert.ok(!allBad.includes('class="dg-sparkline-svg"'), 'all-non-numeric data renders no sparkline svg');
+  const notAnArray = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: '1,2,3' }] }],
+  });
+  assert.ok(!notAnArray.includes('class="dg-sparkline-svg"'), 'non-array data renders no sparkline svg');
+});
+
+test('sparkline escapes title and caption, and flat series keeps a visible line', () => {
+  const html = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', title: 'A & B <team>', caption: 'Q1 <2026>', data: [5, 5, 5] }] }],
+  });
+  assert.match(html, /<div class="dg-sparkline-title">A &amp; B &lt;team&gt;<\/div>/, 'title is escaped');
+  assert.match(html, /<p class="dg-note dg-sparkline-cap">Q1 &lt;2026&gt;<\/p>/, 'caption is escaped');
+  assert.match(
+    html,
+    /<path class="dg-sparkline-line" d="M 0 ([\d.]+)L 50 ([\d.]+)L 100 ([\d.]+)"\/>/,
+    'a flat series still draws a line (range clamps to 1)'
+  );
+  assert.match(html, /aria-label="Q1 &lt;2026&gt;"/, 'figure label prefers the caption');
+});
 
 test('fallbacks: card title object, headline level, badge tone', () => {
   // card `title` may be { text }; headline `level` outside 1-6 falls back to
