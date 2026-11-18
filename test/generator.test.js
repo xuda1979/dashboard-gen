@@ -33,9 +33,9 @@ test('landing example produces a single HTML page', () => {
 test('dashboard runbook section exercises the remaining component library', () => {
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
-  // quote, code, badge, kv, details, tabs, and image — the components no other
-  // example uses — so the canonical DSL proves the full 20-component library
-  // renders in one page.
+  // quote, code, badge, kv, details, tabs, stat-list, and image — the
+  // components no other example uses — so the canonical DSL proves the full
+  // 21-component library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -80,6 +80,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<div class="dg-tabs"><input type="radio" name="dg-tabs-\d+" id="dg-tabs-\d+-0"[^>]*>[\s\S]*<input type="radio" name="dg-tabs-\d+" id="dg-tabs-\d+-1" class="dg-tab-input" checked>\n<label class="dg-tab-label" for="dg-tabs-\d+-1">Alerts<\/label>\n<div class="dg-tab-panel"><dl class="dg-kv">[\s\S]*<label class="dg-tab-label" for="dg-tabs-\d+-2">None selected<\/label>\n<div class="dg-tab-panel"><p class="dg-paragraph">No default tab opens<\/p><\/div>/,
     'runbook tabs zero in on the Alerts panel (active: 1) with a text-only fallback tab'
+  );
+  assert.match(
+    html,
+    /<div class="dg-scroll"><table class="dg-statlist" aria-label="Release health checks"><tbody>\n<tr class="dg-statlist-row"><th scope="row">Builds<\/th><td class="dg-statlist-value">214<\/td><td class="dg-statlist-delta dg-statlist-delta--good">▲ 5<\/td><\/tr>\n<tr class="dg-statlist-row"><th scope="row">Deploys \/ day<\/th><td class="dg-statlist-value">12<\/td><td class="dg-statlist-delta dg-statlist-delta--neutral">▼ 1<\/td><\/tr>\n<tr class="dg-statlist-row"><th scope="row">Rollbacks<\/th><td class="dg-statlist-value">0<\/td><td class="dg-statlist-delta dg-statlist-delta--neutral">0<\/td><\/tr>\n<tr class="dg-statlist-row"><th scope="row">Open incidents<\/th><td class="dg-statlist-value">#2<\/td><td class="dg-statlist-delta dg-statlist-delta--bad">▲ 1<\/td><\/tr>\n<\/tbody><\/table><\/div>/,
+    'runbook renders the KPI row table with a good/neutral/bad delta band'
   );
 });
 
@@ -1556,6 +1561,89 @@ test('tabs honors active index, string labels, text bodies, and empty defaults',
     html,
     /<label class="dg-tab-label" for="dg-tabs-\d+-0">Tab 1<\/label>\n<div class="dg-tab-panel"><p class="dg-paragraph">No content\.<\/p>/,
     'with no tabs array a single Tab 1 fallback renders a No content body'
+  );
+});
+
+test('stat-list renders a KPI row table with caption, prefix/suffix and delta tones', () => {
+  const html = renderHtml({
+    title: 'stats',
+    sections: [{
+      content: [{
+        type: 'stat-list',
+        caption: 'Cluster health',
+        items: [
+          { label: 'Nodes', value: 12, delta: { value: 3, tone: 'good' } },
+          { label: 'CPU', value: '42', suffix: '%', delta: { value: 1.5, tone: 'bad' } },
+          { label: 'Cost', prefix: '$', value: '1.2k', delta: { value: 0, tone: 'neutral' } },
+          { label: 'Uptime', value: '99.9', suffix: '%' },
+        ],
+      }],
+    }],
+  });
+  assert.match(
+    html,
+    /<div class="dg-scroll"><table class="dg-statlist" aria-label="Cluster health"><tbody>\n/,
+    'caption names the stat-list table'
+  );
+  assert.match(
+    html,
+    /<tr class="dg-statlist-row"><th scope="row">Nodes<\/th><td class="dg-statlist-value">12<\/td><td class="dg-statlist-delta dg-statlist-delta--good">▲ 3<\/td><\/tr>/,
+    'good delta renders green with an up arrow'
+  );
+  assert.match(
+    html,
+    /<tr class="dg-statlist-row"><th scope="row">CPU<\/th><td class="dg-statlist-value">42%<\/td><td class="dg-statlist-delta dg-statlist-delta--bad">▲ 1\.5<\/td><\/tr>/,
+    'suffix joins the value and bad tone colors the delta'
+  );
+  assert.match(
+    html,
+    /<tr class="dg-statlist-row"><th scope="row">Cost<\/th><td class="dg-statlist-value">\$1\.2k<\/td><td class="dg-statlist-delta dg-statlist-delta--neutral">0<\/td><\/tr>/,
+    'prefix joins the value and a zero delta renders bare with neutral tone'
+  );
+  assert.match(
+    html,
+    /<tr class="dg-statlist-row"><th scope="row">Uptime<\/th><td class="dg-statlist-value">99\.9%<\/td><\/tr>/,
+    'a row without delta renders no delta cell'
+  );
+});
+
+test('stat-list degrades without caption or items and escapes row fields', () => {
+  const html = renderHtml({
+    title: 'stats',
+    sections: [{
+      content: [
+        { type: 'stat-list', items: [{ label: '<hr>', value: 'a<b', delta: '5' }] },
+        { type: 'stat-list' },
+        { type: 'stat-list', items: 'nope' },
+        { type: 'stat-list', items: [{ title: 'Title-only row', value: '7' }] },
+        { type: 'stat-list', items: [{ prefix: '#', value: '9' }] },
+        { type: 'stat-list', items: ['plain-string row'] },
+      ],
+    }],
+  });
+  assert.ok(!/>aria-label=/.test(html), 'no caption means no aria-label on the table');
+  assert.match(
+    html,
+    /<th scope="row">&lt;hr&gt;<\/th><td class="dg-statlist-value">a&lt;b<\/td><td class="dg-statlist-delta dg-statlist-delta--neutral">▲ 5<\/td>/,
+    'labels and values are escaped and a numeric-string delta renders neutral'
+  );
+  assert.match(html, /<td class="dg-note" colspan="3">No data to draw\.<\/td>/, 'empty stat-list writes a no-data note');
+  const tables = html.match(/class="dg-statlist"/g) || [];
+  assert.strictEqual(tables.length, 6, 'a non-array items list still renders a table shell');
+  assert.match(
+    html,
+    /<tr class="dg-statlist-row"><th scope="row">Title-only row<\/th><td class="dg-statlist-value">7<\/td><\/tr>/,
+    'an item with title (no label) uses title as the row label'
+  );
+  assert.match(
+    html,
+    /<tr class="dg-statlist-row"><th scope="row"><\/th><td class="dg-statlist-value">#9<\/td><\/tr>/,
+    'an object item with no label or title renders an empty label with its prefix and value'
+  );
+  assert.match(
+    html,
+    /<tr class="dg-statlist-row"><th scope="row">plain-string row<\/th><td class="dg-statlist-value"><\/td><\/tr>/,
+    'a string item renders a label row with an empty value and no delta cell'
   );
 });
 

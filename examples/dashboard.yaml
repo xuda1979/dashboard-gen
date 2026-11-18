@@ -175,6 +175,16 @@ sections:
           - label: None selected
             text: No default tab opens
 
+      - type: stat-list
+        caption: Release health checks
+        items:
+          - { label: Builds, value: 214, delta: { value: 5, tone: good } }
+          - { label: Deploys / day, value: 12, delta: -1 }
+          - label: Rollbacks
+            value: 0
+            delta: { value: 0, tone: neutral }
+          - { label: Open incidents, prefix: "#", value: 2, delta: { value: 1, tone: bad } }
+
       - type: image
         file: ops-console.svg
         caption: Ops Console status strip
