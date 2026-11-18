@@ -372,6 +372,49 @@ test('runtime honors numeric start as the line chart baseline', () => {
   assert.ok(Math.max(...anchored) > Math.max(...base), 'lower baseline shifts the polyline down');
 });
 
+test('runtime keeps a line y-axis right-way-up when start sits above the data', () => {
+  // A numeric start above the padded data max used to pin minV >= maxV, so
+  // y() divided by a negative span and inverted the axis: higher data mapped
+  // to a LARGER y (drifting off-plot downward) instead of a smaller one. The
+  // baseline may legitimately sit above the data, but the axis must keep a
+  // positive, correctly oriented range.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Temp\n        data:\n          - { label: Jan, series: { t: 20 } }\n          - { label: Feb, series: { t: 24 } }\n          - { label: Mar, series: { t: 28 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  // The padded data max here is 30.8 (minV 0 -> maxV 28, pad 2.8); start 35
+  // lands above it, which used to leave maxV - minV negative.
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Temp', 'data-chart-start': '35' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'Jan', series: { t: 20 } }, { label: 'Feb', series: { t: 24 } }, { label: 'Mar', series: { t: 28 } }] });
+  const out = figureEls[0].innerHTML;
+  const d = /<path class="dg-series" d="([^"]+)"/.exec(out);
+  assert.ok(d, 'line chart produced a series path');
+  const ys = d[1].match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+  assert.strictEqual(ys.length, 3, 'one point per row');
+  assert.ok(ys.every(Number.isFinite), 'every mapped y stays finite');
+  assert.ok(!/NaN|Infinity/.test(out), 'chart leaks no NaN/Infinity');
+  // Data rises 20 -> 28, so mapped y must fall: the axis stays right-way-up.
+  assert.ok(ys[0] > ys[ys.length - 1], 'axis is not inverted: higher data maps to a smaller y');
+});
+
+test('runtime does not divide by zero when start equals the padded data max', () => {
+  // start value was clamped into minV without checking the span: when it landed
+  // exactly on the padded maximum the y scale was zero width and y() divided
+  // by zero, leaking NaN/Infinity into the axis, grid and series coordinates.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Solo\n        data:\n          - { label: Only, series: { t: 20 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  // Single value 20: minV 0 -> maxV 20, pad 2 -> padded max exactly 22.
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Solo', 'data-chart-start': '22' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'Only', series: { t: 20 } }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('<svg'), 'single point still produces an svg');
+  assert.ok(!/NaN|Infinity/.test(out), 'zero-span start leaks no NaN/Infinity');
+});
+
 test('runtime centers a single-point line instead of dividing by zero', () => {
   // With one data point the x-scale has no span, so the naive x(i) formula
   // would divide by (points.length - 1) = 0 and leak NaN coordinates. The
