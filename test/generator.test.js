@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const { buildFromSource, renderHtml } = require('../lib/build');
+const { checkA11y } = require('../lib/a11y');
 
 const EXAMPLE_DIR = path.join(__dirname, '..', 'examples');
 
@@ -826,6 +827,26 @@ test('dg build fails cleanly when the output path is a directory, not a file', (
 // ---------------------------------------------------------------------------
 // Accessibility + no-external-resource (AC2/AC5 invariants on every example)
 // ---------------------------------------------------------------------------
+
+test('every example DSL builds a page that passes the shared a11y gate', () => {
+  // The GitHub Pages workflow (`.github/workflows/pages.yml`) rebuilds each
+  // example with `dg build --check`, which exits 1 the moment checkA11y reports
+  // a problem. A stale fragment in an example (the landing hero once linked
+  // `#feature-grid` while the renderer emitted `#s-feature-grid`) would silently
+  // break that gate in CI, so pin the invariant in the suite: each example's
+  // output must satisfy every check, and the only permitted fragment refs are
+  // ones whose targets the page actually declares.
+  const examples = fs
+    .readdirSync(EXAMPLE_DIR)
+    .filter((f) => f.endsWith('.yaml'))
+    .sort();
+  assert.ok(examples.length >= 5, `expected the five canonical examples, got ${examples.length}`);
+  for (const file of examples) {
+    const html = buildFixture(file.slice(0, -'.yaml'.length));
+    const { problems } = checkA11y(html);
+    assert.deepStrictEqual(problems, [], `a11y problems in examples/${file}`);
+  }
+});
 
 test('dg build fails cleanly when a plain file squats on the output directory', () => {
   // A plain file where dist/ should be makes mkdirSync throw a raw EEXIST

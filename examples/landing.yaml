@@ -16,13 +16,8 @@ hero:
       HTML file. No CDN, no build step, no vendor lock-in.
   - type: button
     text: Get Started
-    href: "#feature-grid"
+    href: "#s-feature-grid"
     style: primary
-  - type: button
-    text: View on GitHub
-    href: "https://github.com/xuda1979/dashboard-gen"
-    style: subtle
-    newtab: true
 
 sections:
   - title: Feature grid
@@ -69,5 +64,5 @@ sections:
         text: Sure. Point the generator at a .json file with the same schema.
       - type: link
         text: Read the docs
-        href: "https://github.com/xuda1979/dashboard-gen"
+        href: "#s-faq"
         style: button
