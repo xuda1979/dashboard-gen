@@ -2,7 +2,7 @@
   "name": "dashboard-gen",
   "version": "0.1.0",
   "description": "Declarative landing-page / read-only dashboard generator from YAML/JSON DSL to a single static HTML/CSS/JS file.",
-  "license": "MIT",
+  "license": "AGPL-3.0-only",
   "type": "commonjs",
   "bin": {
     "dg": "bin/dg"
