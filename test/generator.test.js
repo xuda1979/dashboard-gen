@@ -35,9 +35,9 @@ test('dashboard runbook section exercises the remaining component library', () =
   // grid/stat/table/chart sections it now renders callout, steps, divider,
   // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
   // footnote, timeline, def-list, stepper, image, sparkline, status,
-  // heatmap, progress, terminal, and gauge — the components no other example
-  // uses — so the canonical DSL proves the full 33-component library renders
-  // in one page.
+  // heatmap, progress, terminal, gauge, and breadcrumbs — the components no
+  // other example uses — so the canonical DSL proves the full 34-component
+  // library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -49,6 +49,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<ol class="dg-steps"><li class="dg-steps-item"><span class="dg-steps-num">1<\/span><span class="dg-steps-text">Assess blast radius and page the on-call engineer\.<\/span><\/li>/,
     'runbook renders a numbered steps list'
+  );
+  assert.match(
+    html,
+    /<nav class="dg-breadcrumbs" aria-label="Breadcrumb"><ol class="dg-breadcrumbs-list"><li class="dg-breadcrumbs-item"><a class="dg-breadcrumbs-link" href="#s-overview">Ops Console<\/a><\/li><li class="dg-breadcrumbs-item"><span class="dg-breadcrumbs-current" aria-current="page">Runbook<\/span><\/li><\/ol><\/nav>/,
+    'runbook opens with a labelled breadcrumb trail ending in the current page'
   );
   const runbook = html.match(/<h2 class="dg-section-title" id="s-runbook">[\s\S]*$/)[0];
   assert.strictEqual((runbook.match(/dg-steps-item/g) || []).length, 4, 'runbook has four numbered steps');
@@ -2404,6 +2409,43 @@ test('gauge clamps into range, falls back tone, escapes, and degrades away', () 
   assert.match(html, /<div class="dg-gauge-title">Odd &lt;tone&gt;<\/div>/, 'gauge title escapes');
   const gauges = html.match(/class="dg-figure dg-gauge"/g) || [];
   assert.strictEqual(gauges.length, 2, 'inverted range and missing value render no gauge');
+});
+
+test('breadcrumbs render a labelled trail ending in the current page', () => {
+  const html = renderHtml({
+    title: 'breadcrumbs',
+    sections: [{ content: [
+      { type: 'breadcrumbs', items: [
+        { label: 'Ops <Console>', href: '#s-overview' },
+        'Metrics',
+        { label: 'Runbook' },
+      ] },
+    ] }],
+  });
+  assert.match(
+    html,
+    /<nav class="dg-breadcrumbs" aria-label="Breadcrumb"><ol class="dg-breadcrumbs-list"><li class="dg-breadcrumbs-item"><a class="dg-breadcrumbs-link" href="#s-overview">Ops &lt;Console&gt;<\/a><\/li><li class="dg-breadcrumbs-item"><span class="dg-breadcrumbs-text">Metrics<\/span><\/li><li class="dg-breadcrumbs-item"><span class="dg-breadcrumbs-current" aria-current="page">Runbook<\/span><\/li><\/ol><\/nav>/,
+    'linked items become anchors, bare items plain text, final item is the marked current page'
+  );
+});
+
+test('breadcrumbs honour a custom label, escape hrefs, and degrade away', () => {
+  const html = renderHtml({
+    title: 'breadcrumbs',
+    sections: [{ content: [
+      { type: 'breadcrumbs', label: 'Site & path', items: [
+        { label: 'A', href: 'https://example.com/x?a=1&b=2' },
+        'End',
+      ] },
+      { type: 'breadcrumbs', items: [] },
+      { type: 'breadcrumbs' },
+      { type: 'breadcrumbs', items: [{ label: '' }] },
+    ] }],
+  });
+  assert.match(html, /<nav class="dg-breadcrumbs" aria-label="Site &amp; path">/, 'custom label escapes');
+  assert.match(html, /href="https:\/\/example\.com\/x\?a=1&amp;b=2">A<\/a>/, 'href escapes');
+  const trails = html.match(/class="dg-breadcrumbs"/g) || [];
+  assert.strictEqual(trails.length, 1, 'empty, missing, or all-blank items render no breadcrumb nav');
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {

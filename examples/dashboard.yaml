@@ -162,6 +162,11 @@ sections:
 
   - title: Runbook
     content:
+      - type: breadcrumbs
+        items:
+          - { label: Ops Console, href: "#s-overview" }
+          - { label: Runbook }
+
       - type: callout
         tone: warning
         title: Incident playbook

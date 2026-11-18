@@ -110,6 +110,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `progress`   | `value` (0-100, labelless standalone), `label`/`title`, `tone` (primary/success/warning/danger — labelled completion bar, percent always visible text) |
 | `terminal`   | `items[]` (string or `{text, level}` where level cmd/info/ok/warn/err), `title`, `prompt` (console transcript; levels spelled as visible text) |
 | `gauge`      | `value`, `min`/`max` (default 0/100), `label`, `suffix`, `tone` (primary/success/warning/danger), `caption` (semicircular arc readout; value always visible text) |
+| `breadcrumbs` | `items[]` (string or `{label, href}`), `label` (`<nav>` trail ending in the current page as plain text with `aria-current="page"`) |
 
 ## Data binding
 
