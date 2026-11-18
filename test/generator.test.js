@@ -33,8 +33,8 @@ test('landing example produces a single HTML page', () => {
 test('dashboard runbook section exercises the remaining component library', () => {
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
-  // quote, code, badge, kv, details, and image — the components no other
-  // example uses — so the canonical DSL proves the full 19-component library
+  // quote, code, badge, kv, details, tabs, and image — the components no other
+  // example uses — so the canonical DSL proves the full 20-component library
   // renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
@@ -75,6 +75,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<details class="dg-details"><summary class="dg-details-summary">Rollback checklist<\/summary>[\s\S]*<ul class="dg-ul"><li>Verify the rollback target is a known-good release<\/li>[\s\S]*<div class="dg-callout dg-callout--warning"><p class="dg-callout-body">The rollback check is never skipped\.<\/p>[\s\S]*<\/details>/,
     'runbook folds the rollback checklist inside a closed details block'
+  );
+  assert.match(
+    html,
+    /<div class="dg-tabs"><input type="radio" name="dg-tabs-\d+" id="dg-tabs-\d+-0"[^>]*>[\s\S]*<input type="radio" name="dg-tabs-\d+" id="dg-tabs-\d+-1" class="dg-tab-input" checked>\n<label class="dg-tab-label" for="dg-tabs-\d+-1">Alerts<\/label>\n<div class="dg-tab-panel"><dl class="dg-kv">[\s\S]*<label class="dg-tab-label" for="dg-tabs-\d+-2">None selected<\/label>\n<div class="dg-tab-panel"><p class="dg-paragraph">No default tab opens<\/p><\/div>/,
+    'runbook tabs zero in on the Alerts panel (active: 1) with a text-only fallback tab'
   );
 });
 
@@ -1486,6 +1491,71 @@ test('details honors open, title alias, text body, string content, and empty def
     dflt,
     /<details class="dg-details"><summary class="dg-details-summary">Details<\/summary>[\s\S]*<span class="dg-badge dg-badge--neutral">Tag<\/span><\/div>\n<\/details>/,
     'a missing summary/title falls back to the plain Details label'
+  );
+});
+
+test('tabs renders radio-based tabs, checks the default first tab, and nests components', () => {
+  const html = renderHtml({
+    title: 'tabs',
+    sections: [{
+      content: [{
+        type: 'tabs',
+        tabs: [
+          { label: 'Overview', content: [{ type: 'paragraph', text: 'First pane' }] },
+          { label: 'Details', content: [{ type: 'badge', tone: 'success', text: 'OK' }] },
+        ],
+      }],
+    }],
+  });
+  assert.match(
+    html,
+    /<input type="radio" name="dg-tabs-\d+" id="dg-tabs-\d+-0" class="dg-tab-input" checked>[\s\S]*<label class="dg-tab-label" for="dg-tabs-\d+-0">Overview<\/label>/,
+    'the first tab is checked by default'
+  );
+  assert.match(
+    html,
+    /<div class="dg-tab-panel"><p class="dg-paragraph">First pane<\/p>/,
+    'a tab pane nests full components'
+  );
+  assert.match(
+    html,
+    /<label class="dg-tab-label" for="dg-tabs-\d+-1">Details<\/label>\n<div class="dg-tab-panel"><span class="dg-badge dg-badge--success">OK<\/span><\/div>/,
+    'the second tab renders its label and body'
+  );
+  assert.strictEqual((html.match(/type="radio"/g) || []).length, 2, 'one radio per tab');
+});
+
+test('tabs honors active index, string labels, text bodies, and empty defaults', () => {
+  const html = renderHtml({
+    title: 'tabs',
+    sections: [{
+      content: [
+        { type: 'tabs', active: 1, tabs: [{ label: 'A', text: 'Pane A' }, { label: 'B', text: 'Pane B' }] },
+        { type: 'tabs', tabs: ['Plain'], active: 4 },
+        { type: 'tabs', tabs: [{ label: 'Quiet', content: ['Line'] }] },
+        { type: 'tabs' },
+      ],
+    }],
+  });
+  assert.match(
+    html,
+    /id="dg-tabs-\d+-1" class="dg-tab-input" checked>\n<label class="dg-tab-label" for="dg-tabs-\d+-1">B<\/label>\n<div class="dg-tab-panel"><p class="dg-paragraph">Pane B<\/p>/,
+    'active: 1 checks the second tab and text renders a paragraph body'
+  );
+  assert.match(
+    html,
+    /<label class="dg-tab-label" for="dg-tabs-\d+-0">Plain<\/label>\n<div class="dg-tab-panel"><p class="dg-paragraph">No content\.<\/p>/,
+    'a string-only tab falls back to a plain label with No content body'
+  );
+  assert.match(
+    html,
+    /<label class="dg-tab-label" for="dg-tabs-\d+-0">Quiet<\/label>\n<div class="dg-tab-panel"><p class="dg-paragraph">Line<\/p>/,
+    'an out-of-range active index and string-only content still work'
+  );
+  assert.match(
+    html,
+    /<label class="dg-tab-label" for="dg-tabs-\d+-0">Tab 1<\/label>\n<div class="dg-tab-panel"><p class="dg-paragraph">No content\.<\/p>/,
+    'with no tabs array a single Tab 1 fallback renders a No content body'
   );
 });
 

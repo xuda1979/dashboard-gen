@@ -156,6 +156,25 @@ sections:
             tone: warning
             text: The rollback check is never skipped.
 
+      - type: tabs
+        active: 1
+        tabs:
+          - label: Dashboards
+            content:
+              - type: paragraph
+                text: A read-only internal dashboard generated from a single YAML file.
+              - type: link
+                label: Open the dashboard
+                href: "#s-overview"
+          - label: Alerts
+            content:
+              - type: kv
+                items:
+                  - { key: Channel, value: "#ops-alerts" }
+                  - { key: Severity, value: P1 }
+          - label: None selected
+            text: No default tab opens
+
       - type: image
         file: ops-console.svg
         caption: Ops Console status strip
