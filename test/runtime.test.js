@@ -697,6 +697,38 @@ test('runtime renders multi-series bar chart into SVG bars', () => {
   assert.ok(out.includes('>Q1</text>') && out.includes('>Q2</text>'), 'x-axis labels every category');
 });
 
+test('runtime draws negative bar values below a zero baseline', () => {
+  // barSvg only tracked the positive max, so a negative value mapped the bar
+  // below the svg's bottom edge and gave it a negative height rect: the bar
+  // vanished off-canvas. The zero baseline must stay visible and negative
+  // values must hang below it inside the plot.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: bar\n        title: PnL\n        data:\n          - { label: Q1, series: { p: 40 } }\n          - { label: Q2, series: { p: -20 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'PnL' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'Q1', series: { p: 40 } }, { label: 'Q2', series: { p: -20 } }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(!/NaN|Infinity/.test(out), 'bar chart leaks no NaN/Infinity');
+  const rects = out.match(/<rect class="dg-bar" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g);
+  assert.strictEqual(rects ? rects.length : 0, 2, 'one bar per row');
+  const geo = [];
+  for (const r of rects) {
+    const m = /y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/.exec(r);
+    const y = Number(m[1]), h = Number(m[2]);
+    assert.ok(h > 0, `bar height stays positive (got ${h})`);
+    assert.ok(y >= 0 && y + h <= 320, `bar sits inside the svg viewBox (y ${y}, bottom ${y + h})`);
+    geo.push({ y, h });
+  }
+  // The positive bar (40) is taller than the negative bar (|-20|)…
+  assert.ok(geo[0].h > geo[1].h, 'positive bar is taller than the negative bar');
+  // …and the negative bar's top sits at the zero baseline: the gap from the
+  // positive bar's baseline end to the negative bar's foot must exceed the
+  // positive bar's top-to-baseline run.
+  assert.ok(geo[1].y + geo[1].h > geo[0].y + geo[0].h, 'negative bar extends below the positive bar');
+});
+
 test('runtime draws one pie slice per series key in a single data row', () => {
   // README: pie accepts "a single row with a multi-key series: map (one slice
   // per series key)". The runtime must explode that one row into slices, not
