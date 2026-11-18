@@ -183,6 +183,58 @@ test('a11y-check passes a generated page that carries multiple nav landmarks', (
   assert.match(res.stdout, /\[a11y-check\] OK/, 'reports OK');
 });
 
+test('a11y-check rejects pages with duplicate id attributes', () => {
+  // Generated pages depend on ids resolving to exactly one element — the skip
+  // link's #main, section s-<slug> anchors the auto nav/toc/breadcrumbs link,
+  // tab radio inputs their labels point at, and aria-labelledby targets on
+  // role="img" figures. A duplicate id breaks whichever reference resolves
+  // first (the browser picks the first match), so the lint must fail and name
+  // the repeated id. Script/style bodies are ignored: the inline chart runtime
+  // is JS whose "id=" strings are not element ids.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-dupid-'));
+  const dup = path.join(tmp, 'dup.html');
+  fs.writeFileSync(
+    dup,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main">
+    <h2 id="dup">First</h2>
+    <h3 id="dup">Second</h3>
+  </main>
+</body>
+</html>`
+  );
+  const resDup = runCheck(dup);
+  assert.strictEqual(resDup.ok, false, 'a repeated id fails the check');
+  assert.strictEqual(resDup.code, 1, 'exit code 1');
+  assert.match(resDup.stderr, /duplicate id="dup"/, 'names the repeated id');
+
+  // Unique ids — including the same value used as a JS string inside a script
+  // body, which is not an element id — must pass.
+  const unique = path.join(tmp, 'unique.html');
+  fs.writeFileSync(
+    unique,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title>
+<script>const ref = 'id="s-overview"';</script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main"><h2 id="h">Top</h2></main>
+</body>
+</html>`
+  );
+  const resUnique = runCheck(unique);
+  assert.strictEqual(resUnique.ok, true, 'all-unique ids (and script-body strings) pass');
+  assert.ok(!/duplicate id=/.test(resUnique.stdout), 'no duplicate-id problem on stdout');
+});
+
 test('a11y-check fails when the page theme has insufficient contrast', () => {
   // theme pair #ffffff on #f5f5f5 computes ~1.1:1, far below the AA 4.5:1
   // threshold for body text, so the lint must fail with the measured ratio.
