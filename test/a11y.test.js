@@ -89,7 +89,7 @@ test('a11y-check fails with diagnostics on a page missing main/nav/skip', () => 
   assert.strictEqual(res.code, 1, 'exit code 1');
   assert.match(res.stderr, /no <html lang> attribute/);
   assert.match(res.stderr, /expected exactly one <main>/);
-  assert.match(res.stderr, /no <nav> with aria-label/);
+  assert.match(res.stderr, /no <nav> landmark/);
   assert.match(res.stderr, /missing skip link to #main/);
   assert.match(res.stderr, /<img> missing alt:/);
 });
@@ -115,6 +115,72 @@ test('a11y-check fails when a single <main> lacks the id="main" anchor', () => {
   assert.strictEqual(res.code, 1, 'exit code 1');
   assert.match(res.stderr, /<main> missing id="main"/, 'reports the missing anchor');
   assert.ok(!/expected exactly one <main>/.test(res.stderr), 'the count check itself still passes');
+});
+
+test('a11y-check rejects any <nav> landmark lacking an aria-label', () => {
+  // Generated pages carry several nav landmarks (auto nav, toc, breadcrumbs),
+  // and WCAG requires every landmark to be distinguishable by name — a bare
+  // <nav> anywhere is a defect, not just "at least one labelled nav". A page
+  // with one labelled and one unlabelled nav must fail naming the offender,
+  // while the fully-labelled companion passes.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-navlabel-'));
+  const bare = path.join(tmp, 'bare.html');
+  fs.writeFileSync(
+    bare,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Primary"><a href="#s">S</a></nav>
+  <nav class="dg-breadcrumbs"><ol><li>Home</li></ol></nav>
+  <main id="main"><h2>Top</h2></main>
+</body>
+</html>`
+  );
+  const resBare = runCheck(bare);
+  assert.strictEqual(resBare.ok, false, 'an unlabelled nav among labelled ones fails the check');
+  assert.strictEqual(resBare.code, 1, 'exit code 1');
+  assert.match(resBare.stderr, /<nav> without aria-label: <nav class="dg-breadcrumbs">/, 'names the offending <nav>');
+  assert.ok(!/no <nav> landmark/.test(resBare.stderr), 'a nav exists; the count check itself passes');
+
+  // The same page with every nav labelled must pass.
+  const labelled = path.join(tmp, 'labelled.html');
+  fs.writeFileSync(
+    labelled,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Primary"><a href="#s">S</a></nav>
+  <nav class="dg-breadcrumbs" aria-label="Breadcrumb"><ol><li>Home</li></ol></nav>
+  <main id="main"><h2>Top</h2></main>
+</body>
+</html>`
+  );
+  const resLabelled = runCheck(labelled);
+  assert.strictEqual(resLabelled.ok, true, 'single-labelled and multiple-labelled navs both pass');
+  assert.ok(!/without aria-label/.test(resLabelled.stdout), 'no missing-label problem on stdout');
+});
+
+test('a11y-check passes a generated page that carries multiple nav landmarks', () => {
+  // The canonical example emits the auto nav ("Primary"), a toc and a
+  // breadcrumb trail — three labelled <nav> elements on one page. All of them
+  // carry aria-label, so the every-nav rule must stay green on real generator
+  // output (a false positive here would block `dg build --check` on the
+  // flagship example).
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'dashboard.yaml'), 'utf8');
+  const html = buildFromSource(src, 'dashboard.yaml', { fileDir: 'examples' });
+  const navTags = html.match(/<nav\b[^>]*>/g) || [];
+  assert.ok(navTags.length >= 3, `expected multiple <nav> landmarks, got ${navTags.length}`);
+  assert.ok(navTags.every((t) => /\baria-label=/.test(t)), 'every emitted <nav> is labelled');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-multinav-'));
+  const file = path.join(tmp, 'page.html');
+  fs.writeFileSync(file, html);
+  const res = runCheck(file);
+  assert.strictEqual(res.ok, true, `expected pass, got code ${res.code}: ${res.stderr}`);
+  assert.match(res.stdout, /\[a11y-check\] OK/, 'reports OK');
 });
 
 test('a11y-check fails when the page theme has insufficient contrast', () => {

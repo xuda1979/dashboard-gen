@@ -132,7 +132,8 @@ chart data rebuilds the page without touching the DSL.
 ## Accessibility
 
 Generated pages include a skip link, `lang`, a single `<main id="main">`
-landmark, a labelled `<nav>`, semantic tables (`scope="col"`/`scope="row"`),
+landmark, every `<nav>` landmark labelled (auto nav, table of contents,
+breadcrumbs), semantic tables (`scope="col"`/`scope="row"`),
 and every `role="img"` element (charts, stat values, progress bars) carries an
 accessible name. Lint any artifact, or fold the same checks into the build:
 
