@@ -34,9 +34,9 @@ test('dashboard runbook section exercises the remaining component library', () =
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
   // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
-  // footnote, timeline, def-list, stepper, image, sparkline, and status — the
-  // components no other example uses — so the canonical DSL proves the full
-  // 29-component library renders in one page.
+  // footnote, timeline, def-list, stepper, image, sparkline, status, and
+  // heatmap — the components no other example uses — so the canonical DSL
+  // proves the full 30-component library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -2190,6 +2190,92 @@ test('status renders as a labelled figure in the overview example', () => {
     /<div class="dg-status"><div class="dg-status-title">Environment health<\/div><ul class="dg-status-list">[\s\S]*<span class="dg-status-name">Production API<\/span><span class="dg-status-state dg-status-state--healthy">Healthy<\/span>[\s\S]*<span class="dg-status-name">EU database primary<\/span><span class="dg-status-state dg-status-state--down">Down<\/span>[\s\S]*<\/ul><\/div>/,
     'overview lists each environment with its last-known state'
   );
+});
+
+test('heatmap renders an intensity grid as a real table with scoped headers', () => {
+  // Heatmap builds a semantic <table> (thea d/scope on every th, aria-label) so
+  // screen readers read each cell's numeric value as text — the color ramp is
+  // decoration, never the sole signal (a11y check 6).
+  const html = renderHtml({
+    title: 'heatmap',
+    sections: [{ content: [{ type: 'heatmap', title: 'Incidents', columns: ['Mon', 'Tue', 'Wed'], rows: [
+      { label: '09', values: [2, 5, 1] },
+      { label: '12', values: [0, 1, 3] },
+    ] }] }],
+  });
+  assert.match(html, /<div class="dg-heatmap">\n<div class="dg-heatmap-title">Incidents<\/div>\n/, 'opens as a titled block');
+  assert.match(
+    html,
+    /<div class="dg-scroll"><table class="dg-heatmap-table" aria-label="Incidents"><thead><tr><th scope="col" class="dg-heatmap-corner"><\/th><th scope="col">Mon<\/th><th scope="col">Tue<\/th><th scope="col">Wed<\/th><\/tr><\/thead>/,
+    'column headers and the corner carry scope="col"'
+  );
+  assert.match(
+    html,
+    /<tr><th scope="row">09<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l([1-5])">2<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l([1-5])">5<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l([1-5])">1<\/td><\/tr><tr><th scope="row">12<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l0">·<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l([1-5])">1<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l([1-5])">3<\/td><\/tr>/,
+    'row headers carry scope="row" and every cell keeps its numeric text'
+  );
+  assert.match(
+    html,
+    /<div class="dg-heatmap-legend"><span class="dg-heatmap-legend-label">Low<\/span>[\s\S]*<span class="dg-heatmap-legend-label">High<\/span><\/div>/,
+    'a Low→High legend wraps the grid'
+  );
+});
+
+test('heatmap pulls bare rows from a data matrix and scales intensity to the row max', () => {
+  const html = renderHtml({
+    title: 'heatmap',
+    sections: [{ content: [{ type: 'heatmap', title: 'Load', columns: ['a', 'b'], rows: ['x', 'y'], data: [[2, 4], [1, 1]] }] }],
+  });
+  assert.match(
+    html,
+    /<th scope="row">x<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l3">2<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l5">4<\/td>/,
+    'bare rows resolve from the data matrix and scale to the row max (2→l3, 4→l5)'
+  );
+  assert.match(
+    html,
+    /<th scope="row">y<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l5">1<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l5">1<\/td>/,
+    'a flat row maxes the cell level'
+  );
+});
+
+test('heatmap truncates or pads ragged rows, escapes text, and degrades away', () => {
+  const html = renderHtml({
+    title: 'heatmap',
+    sections: [{ content: [{ type: 'heatmap', title: 'T & <M>', columns: ['a', 'b'], rows: [
+      { label: 'row <1>', values: [3, 9, 99, 'x'] },
+      { label: '' },
+      { label: 'row <2>', values: [1] },
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<th scope="row">row &lt;1&gt;<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l2">3<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l5">9<\/td>/,
+    'over-long rows truncate and non-finite values drop to zero'
+  );
+  assert.match(
+    html,
+    /<th scope="row">row &lt;2&gt;<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l5">1<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l0">·<\/td>/,
+    'short rows pad with a muted zero cell'
+  );
+  const rowHeaders = (html.match(/<th scope="row">[^<]*<\/th>/g) || []);
+  assert.deepEqual(rowHeaders, ['<th scope="row">row &lt;1&gt;</th>', '<th scope="row">row &lt;2&gt;</th>'], 'blank-label rows are skipped');
+});
+
+test('heatmap with no rows or columns renders nothing', () => {
+  for (const c of [
+    { type: 'heatmap' },
+    { type: 'heatmap', columns: ['a', 'b'] },
+    { type: 'heatmap', columns: ['a', 'b'], rows: [] },
+    { type: 'heatmap', columns: [], rows: ['x'], data: [[1]] },
+  ]) {
+    const html = renderHtml({ title: 'heatmap', sections: [{ content: [c] }] });
+    assert.ok(!html.includes('class="dg-heatmap"'), 'missing/empty grid renders no heatmap');
+  }
+  const title = renderHtml({
+    title: 'heatmap',
+    sections: [{ content: [{ type: 'heatmap', title: 'Skip & <me>', columns: ['a'], rows: [{ label: 'z', values: [4] }] }] }],
+  });
+  assert.match(title, /<div class="dg-heatmap-title">Skip &amp; &lt;me&gt;<\/div>/, 'title escapes');
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {

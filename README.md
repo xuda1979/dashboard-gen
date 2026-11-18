@@ -106,6 +106,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `stepper`    | `items[]` (string or `{text}` steps), `current` (0-based — step-marked progress) |
 | `sparkline`  | `data` (numbers, `[label, value]`/`[value]`, `{value}`/`{label, value}` — build-time SVG trend), `title`, `caption` |
 | `status`     | `items[]` (string or `{name, state, detail}` — service-health list; states healthy/degraded/down/maintenance), `title` |
+| `heatmap`    | `columns[]`, `rows[]` (string or `{label, values}`) / `data` matrix — intensity grid, every cell textual, Low→High legend, `title` |
 
 ## Data binding
 
