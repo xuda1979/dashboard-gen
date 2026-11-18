@@ -3877,6 +3877,33 @@ test('dg new -t fetch scaffolds a project with fixture, workflow, and deps', () 
   }
 });
 
+test('dg new -t dashboard copies its image fixture and the scaffold builds', () => {
+  // The dashboard template binds examples/ops-console.svg via `file:` on a
+  // `type: image` block. The scaffold must copy that fixture next to
+  // dg.dsl.yaml (like fetch copies market.json) or the fresh project cannot
+  // build: dg build would fail with ENOENT on ops-console.svg. Regression
+  // test for the template-fixtures map in lib/cli.js.
+  const { cmdNew, cmdBuild } = require('../lib/cli');
+  const os = require('node:os');
+  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-new-dashfix-'));
+  const origCwd = process.cwd();
+  process.chdir(cwd);
+  try {
+    cmdNew({ _: ['dashproj'], template: 'dashboard' });
+    assert.ok(fs.existsSync(path.join(cwd, 'dashproj', 'dg.dsl.yaml')));
+    assert.ok(fs.existsSync(path.join(cwd, 'dashproj', 'ops-console.svg')), 'dashboard image fixture copied');
+    assert.ok(fs.existsSync(path.join(cwd, 'dashproj', '.github', 'workflows', 'pages.yml')));
+
+    const dslPath = path.join(cwd, 'dashproj', 'dg.dsl.yaml');
+    cmdBuild({ _: [dslPath] });
+    const html = fs.readFileSync(path.join(cwd, 'dist', 'site.html'), 'utf8');
+    assert.match(html, /data:image\/svg\+xml;utf8,/, 'image inlined as a data URI');
+    assert.match(html, /Incident timeline/, 'dashboard template rendered');
+  } finally {
+    process.chdir(origCwd);
+  }
+});
+
 test('dg new defaults to the landing template and the scaffold builds', () => {
   const { cmdNew, cmdBuild } = require('../lib/cli');
   const os = require('node:os');
