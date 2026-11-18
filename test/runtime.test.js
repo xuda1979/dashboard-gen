@@ -748,6 +748,28 @@ test('runtime draws one pie slice per series key in a single data row', () => {
   assert.ok(out.includes('Organic 60.0%') && out.includes('Paid 40.0%'), 'slice labels use the series keys with computed shares');
 });
 
+test('runtime draws a single-value pie as a visible full circle', () => {
+  // A slice with 100% of the total spans the whole circle: an SVG path whose
+  // arc runs from a point back to the same point collapses to two coincident
+  // radii and renders nothing. The runtime must emit a circle element so the
+  // chart stays visible and the accessible title still names the slice.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: pie\n        title: Only\n        data:\n          - { label: s, value: 100 }\n',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'Only' },
+  ]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 's', value: 100 }] });
+  const out = figureEls[0].innerHTML;
+  const slice = out.match(/<circle class="dg-slice" cx="[^"]+" cy="[^"]+" r="([^"]+)"[^>]*>/);
+  assert.ok(slice, 'full-circle slice is emitted as a <circle>, not a degenerate path');
+  assert.strictEqual(slice[1], '90', 'circle uses the chart radius');
+  assert.ok(out.includes('<title>s: 100 (100.0%)</title>'), 'circle title spells the slice value and share');
+  assert.ok(!/NaN|Infinity/.test(out), 'no NaN or Infinity leaks into the chart');
+});
+
 test('runtime applies custom swatches to line and bar series paths', () => {
   // data-chart-swatches must color each line/bar series stroke/fill (and the
   // legend swatch) just as it does pie slices, instead of the palette hash
