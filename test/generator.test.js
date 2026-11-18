@@ -35,9 +35,9 @@ test('dashboard runbook section exercises the remaining component library', () =
   // grid/stat/table/chart sections it now renders callout, steps, divider,
   // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
   // footnote, timeline, def-list, stepper, image, sparkline, status,
-  // heatmap, progress, and terminal — the components no other example uses —
-  // so the canonical DSL proves the full 32-component library renders in one
-  // page.
+  // heatmap, progress, terminal, and gauge — the components no other example
+  // uses — so the canonical DSL proves the full 33-component library renders
+  // in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -107,6 +107,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<div class="dg-terminal" role="region" aria-label="Rollback session"><div class="dg-terminal-header"><span class="dg-terminal-title">Rollback session<\/span><\/div><pre class="dg-terminal-body"><span class="dg-terminal-line dg-terminal-line--cmd">\$ dg deploy --service billing-worker --rev 2143<\/span>/,
     'runbook replays the rollback session as a titled terminal console'
+  );
+  assert.match(
+    html,
+    /<div class="dg-figure dg-gauge" role="img" aria-label="Queue saturation: 38%">\s*<div class="dg-gauge-title">Queue saturation<\/div>\s*<div class="dg-gauge-main"><svg class="dg-gauge-svg" viewBox="0 0 100 58" aria-hidden="true" focusable="false"><path class="dg-gauge-track" d="M 10 50 A 40 40 0 0 1 90 50"\/><path class="dg-gauge-arc dg-gauge-arc--warning" d="M 10 50 A 40 40 0 0 1 [\d.]+ [\d.]+"\/><\/svg><div class="dg-gauge-readout"><span class="dg-gauge-value">38%<\/span><span class="dg-gauge-range">0 – 100<\/span><\/div><\/div>\s*<p class="dg-note dg-gauge-cap">Share of the worker pool busy at peak<\/p><\/div>/,
+    'metrics gauge spells its value and range as text under a labelled semicircular arc'
   );
   assert.match(
     html,
@@ -2368,6 +2373,37 @@ test('terminal falls back levels, splits multiline text, escapes, and degrades a
   assert.match(html, /<span class="dg-terminal-line dg-terminal-line--info">first line<\/span>\n<span class="dg-terminal-line dg-terminal-line--info">second line<\/span>/, 'multiline text splits into one line per break');
   const terminals = html.match(/class="dg-terminal"/g) || [];
   assert.strictEqual(terminals.length, 1, 'missing, empty, or all-blank item lists render no terminal');
+});
+
+test('gauge renders a labelled semicircular arc with a textual readout', () => {
+  const html = renderHtml({
+    title: 'gauge',
+    sections: [{ content: [
+      { type: 'gauge', label: 'Scan coverage', value: 87, suffix: '%', tone: 'success', caption: 'Across the fleet' },
+    ] }],
+  });
+  assert.match(
+    html,
+    /<div class="dg-figure dg-gauge" role="img" aria-label="Scan coverage: 87%">\s*<div class="dg-gauge-title">Scan coverage<\/div>\s*<div class="dg-gauge-main"><svg class="dg-gauge-svg" viewBox="0 0 100 58" aria-hidden="true" focusable="false"><path class="dg-gauge-track" d="M 10 50 A 40 40 0 0 1 90 50"\/><path class="dg-gauge-arc dg-gauge-arc--success" d="M 10 50 A 40 40 0 0 1 [\d.]+ [\d.]+"\/><\/svg><div class="dg-gauge-readout"><span class="dg-gauge-value">87%<\/span><span class="dg-gauge-range">0 – 100<\/span><\/div><\/div>\s*<p class="dg-note dg-gauge-cap">Across the fleet<\/p><\/div>/,
+    'gauge spells value and range as text and names itself in the aria-label'
+  );
+});
+
+test('gauge clamps into range, falls back tone, escapes, and degrades away', () => {
+  const html = renderHtml({
+    title: 'gauge',
+    sections: [{ content: [
+      { type: 'gauge', label: 'Overshoot', value: 250, max: 100, suffix: 'ms' },
+      { type: 'gauge', label: 'Odd <tone>', value: 12, tone: 'bogus' },
+      { type: 'gauge', label: 'Bad range', value: 5, min: 9, max: 2 },
+      { type: 'gauge', label: 'No value' },
+    ] }],
+  });
+  assert.match(html, /aria-label="Overshoot: 250ms"/, 'value beyond max keeps its real text while the arc clamps');
+  assert.match(html, /<path class="dg-gauge-arc dg-gauge-arc--primary" d="M 10 50 A 40 40 0 0 1 90 50"\/>/, 'full-range overshoot draws the whole arc, unknown tone falls back to primary');
+  assert.match(html, /<div class="dg-gauge-title">Odd &lt;tone&gt;<\/div>/, 'gauge title escapes');
+  const gauges = html.match(/class="dg-figure dg-gauge"/g) || [];
+  assert.strictEqual(gauges.length, 2, 'inverted range and missing value render no gauge');
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {

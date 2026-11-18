@@ -120,6 +120,13 @@ sections:
         label: Build queue depth
         value: 38
         tone: warning
+      - type: gauge
+        label: Queue saturation
+        value: 38
+        max: 100
+        suffix: '%'
+        tone: warning
+        caption: Share of the worker pool busy at peak
 
   - title: Releases
     content:
