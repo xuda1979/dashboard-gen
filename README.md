@@ -166,4 +166,13 @@ so a page that fails the a11y invariants is not deployed. Enable Pages →
   `render` (page assembly + inline SVG chart runtime), `style`/`theme`
   (token CSS), `cli` (`new/build/watch/serve`).
 
-MIT
+## License
+
+Dual-licensed: the source code is released under the
+**GNU Affero General Public License v3.0 (AGPL-3.0)** — see
+[`LICENSE`](LICENSE). Any commercial or profit-making use, or use in a
+product or service sold or licensed to others, requires a separate
+written commercial authorization agreement with the copyright holder — see
+[`COMMERCIAL-LICENSE.md`](COMMERCIAL-LICENSE.md).
+
+Copyright (c) 2026 许达 (Xu Da) / 中国移动研究院 (China Mobile Research Institute).

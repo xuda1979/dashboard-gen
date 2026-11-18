@@ -1506,6 +1506,23 @@ test('image component verifies the asset exists and supports raster mimes', () =
   );
 });
 
+test('image with no fileDir resolves a relative file against the working directory', () => {
+  // The fixture lives in the CWD because that is what a missing fileDir means:
+  // the relative path joins onto ".".
+  const rel = 'dg-img-rel-fixture.svg';
+  fs.writeFileSync(rel, '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"/>');
+  try {
+    const html = renderHtml(
+      { title: 't', sections: [{ content: [{ type: 'image', file: rel, alt: 'Rel' }] }] },
+      {}
+    );
+    assert.match(html, /<img src="data:image\/svg\+xml;utf8,/i, 'relative file with no fileDir embeds from the working directory');
+  } finally {
+    fs.rmSync(rel);
+  }
+  assert.ok(!fs.existsSync(rel), 'fixture is cleaned up');
+});
+
 test('details renders a closed collapsible block and forwards nested components', () => {
   const html = renderHtml({
     title: 'details',
@@ -2304,10 +2321,16 @@ test('heatmap with no rows or columns renders nothing', () => {
     { type: 'heatmap', columns: ['a', 'b'] },
     { type: 'heatmap', columns: ['a', 'b'], rows: [] },
     { type: 'heatmap', columns: [], rows: ['x'], data: [[1]] },
+    { type: 'heatmap', columns: ['a'], rows: [{ label: ' ', values: [1] }, { label: '', values: [2] }] },
   ]) {
     const html = renderHtml({ title: 'heatmap', sections: [{ content: [c] }] });
     assert.ok(!html.includes('class="dg-heatmap"'), 'missing/empty grid renders no heatmap');
   }
+  const filtered = renderHtml({
+    title: 'heatmap',
+    sections: [{ content: [{ type: 'heatmap', columns: ['a'], rows: [{ label: ' \t', values: [1] }, { label: '', values: [2] }] }] }],
+  });
+  assert.ok(!filtered.includes('class="dg-heatmap"'), 'rows whose labels are all blank collapse the grid and render nothing');
   const title = renderHtml({
     title: 'heatmap',
     sections: [{ content: [{ type: 'heatmap', title: 'Skip & <me>', columns: ['a'], rows: [{ label: 'z', values: [4] }] }] }],
@@ -2430,6 +2453,45 @@ test('gauge clamps into range, falls back tone, escapes, and degrades away', () 
   assert.match(html, /<div class="dg-gauge-title">Odd &lt;tone&gt;<\/div>/, 'gauge title escapes');
   const gauges = html.match(/class="dg-figure dg-gauge"/g) || [];
   assert.strictEqual(gauges.length, 2, 'inverted range and missing value render no gauge');
+});
+
+test('terminal without a title or prompt stays a bare block using the default $ prompt', () => {
+  // A title-less terminal is plain text to assistive tech: no role="region"
+  // wrapper and no header, but command lines still carry the default prompt.
+  const html = renderHtml({
+    title: 'terminal',
+    sections: [{ content: [{ type: 'terminal', items: [{ text: 'go', level: 'cmd' }, 'info line'] }] }],
+  });
+  assert.match(
+    html,
+    /<div class="dg-terminal"><pre class="dg-terminal-body"><span class="dg-terminal-line dg-terminal-line--cmd">\$ go<\/span>\n<span class="dg-terminal-line dg-terminal-line--info">info line<\/span><\/pre><\/div>/,
+    'no title means no region/header, and command lines fall back to the default $ prompt'
+  );
+});
+
+test('gauge at the minimum value draws only the track and names itself from value alone', () => {
+  // value === min makes the arc fraction zero: the SVG keeps its track but
+  // emits no arc path, and an absent label/title leaves the accessible name
+  // as the bare value + suffix.
+  const html = renderHtml({
+    title: 'gauge',
+    sections: [{ content: [{ type: 'gauge', value: 5, min: 5, max: 10, suffix: '%' }] }],
+  });
+  assert.match(html, /<div class="dg-figure dg-gauge" role="img" aria-label="5%">/, 'no label/title means the name is the bare value + suffix');
+  assert.match(
+    html,
+    /<path class="dg-gauge-track" d="M 10 50 A 40 40 0 0 1 90 50"\/><\/svg>/,
+    'value at min draws the track but no arc path'
+  );
+});
+
+test('gauge falls back to title for its label and accessible name', () => {
+  const html = renderHtml({
+    title: 'gauge',
+    sections: [{ content: [{ type: 'gauge', title: 'Disk', value: 50 }] }],
+  });
+  assert.match(html, /<div class="dg-figure dg-gauge" role="img" aria-label="Disk: 50">/, 'title supplies the label when label is absent');
+  assert.match(html, /<div class="dg-gauge-title">Disk<\/div>/, 'title fills the gauge title slot');
 });
 
 test('breadcrumbs render a labelled trail ending in the current page', () => {
