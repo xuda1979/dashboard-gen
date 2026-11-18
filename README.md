@@ -100,6 +100,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `details`    | `summary`/`title`, `content` (components or strings), `open`, `text` (collapsible block) |
 | `tabs`       | `tabs[]` (`label` + `content`/`text`), `active` (radio-based, zero-JS tabs) |
 | `checklist`  | `items[]` (string or `{text, done}` — done/pending status list)     |
+| `footnote`   | `text`, `label` (small-print end note)                              |
 
 ## Data binding
 

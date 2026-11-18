@@ -199,3 +199,7 @@ sections:
       - type: image
         file: ops-console.svg
         caption: Ops Console status strip
+
+      - type: footnote
+        text: Incident windows and datapoints above are illustrative; the rollback
+          checklist reflects the internal runbook as of this revision.

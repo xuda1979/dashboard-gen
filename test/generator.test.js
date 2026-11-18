@@ -33,9 +33,9 @@ test('landing example produces a single HTML page', () => {
 test('dashboard runbook section exercises the remaining component library', () => {
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
-  // quote, code, badge, kv, details, tabs, stat-list, toc, checklist, and
-  // image — the components no other example uses — so the canonical DSL proves
-  // the full 23-component library renders in one page.
+  // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
+  // footnote, and image — the components no other example uses — so the
+  // canonical DSL proves the full 24-component library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -95,6 +95,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<ul class="dg-checklist"><li class="dg-checklist-item dg-checklist-item--done"><span class="dg-checklist-mark">✓<\/span><span class="dg-checklist-text">Billing-queue drained<\/span><\/li><li class="dg-checklist-item dg-checklist-item--done"><span class="dg-checklist-mark">✓<\/span><span class="dg-checklist-text">Healthz green after rollback<\/span><\/li><li class="dg-checklist-item dg-checklist-item--done"><span class="dg-checklist-mark">✓<\/span><span class="dg-checklist-text">Canary at 100% for 30 minutes<\/span><\/li><li class="dg-checklist-item dg-checklist-item--pending"><span class="dg-checklist-mark">○<\/span><span class="dg-checklist-text">On-call notified of the incident window<\/span><\/li><li class="dg-checklist-item dg-checklist-item--pending"><span class="dg-checklist-mark">○<\/span><span class="dg-checklist-text">Post-incident review scheduled<\/span><\/li><\/ul>/,
     'runbook closes with a done/pending status checklist'
+  );
+  assert.match(
+    html,
+    /<aside class="dg-footnote" role="doc-footnote" aria-label="Footnote">Incident windows and datapoints above are illustrative; the rollback checklist reflects the internal runbook as of this revision\.<\/aside>/,
+    'runbook ends on a small-print footnote'
   );
 });
 
@@ -1780,6 +1785,39 @@ test('checklist escapes texts, drops blank entries, and degrades to nothing', ()
   assert.ok(!empty.includes('<ul class="dg-checklist"'), 'all-blank items render no checklist');
   const missing = renderHtml({ title: 'checklist', sections: [{ content: [{ type: 'checklist' }] }] });
   assert.ok(!missing.includes('<ul class="dg-checklist"'), 'missing items renders no checklist');
+});
+
+test('footnote renders a small-print end note with the doc-footnote role', () => {
+  // A footnote is a muted <aside> named "Footnote" by default so the note is
+  // discoverable by assistive tech; `label` names it, and the text is escaped
+  // like all user text. This mirrors callout's role="note" pattern.
+  const html = renderHtml({
+    title: 'footnote',
+    sections: [{ content: [{ type: 'footnote', text: 'Costs assume <SSD> unless stated.' }] }],
+  });
+  assert.match(
+    html,
+    /<aside class="dg-footnote" role="doc-footnote" aria-label="Footnote">Costs assume &lt;SSD&gt; unless stated\.<\/aside>/,
+    'default Footnote label, escaped body'
+  );
+  const labelled = renderHtml({
+    title: 'footnote',
+    sections: [{ content: [{ type: 'footnote', label: 'Sizing note', text: 'One unit = 1 GiB.' }] }],
+  });
+  assert.match(
+    labelled,
+    /<aside class="dg-footnote" role="doc-footnote" aria-label="Sizing note">One unit = 1 GiB\.<\/aside>/,
+    'explicit label names the footnote'
+  );
+  // A footnote with no usable text renders nothing (dead markup is worse than
+  // no note when the source row is empty).
+  const blank = renderHtml({
+    title: 'footnote',
+    sections: [{ content: [{ type: 'footnote', text: '   ' }] }],
+  });
+  assert.ok(!blank.includes('<aside class="dg-footnote"'), 'whitespace-only footnote renders nothing');
+  const missing = renderHtml({ title: 'footnote', sections: [{ content: [{ type: 'footnote' }] }] });
+  assert.ok(!missing.includes('<aside class="dg-footnote"'), 'missing text renders nothing');
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {
