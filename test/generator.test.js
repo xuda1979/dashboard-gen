@@ -2197,6 +2197,26 @@ test('status renders a service-health list with the state spelled as text', () =
   );
 });
 
+test('status treats a missing or null named state as unknown', () => {
+  const html = renderHtml({
+    title: 'status',
+    sections: [{ content: [{ type: 'status', items: [
+      { name: 'Cassandra', detail: 'no state reported' },
+      { name: 'Redis', state: null },
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<span class="dg-status-name">Cassandra<\/span><span class="dg-status-state dg-status-state--unknown">Unknown<\/span><span class="dg-status-detail">no state reported<\/span>/,
+    'an item with no state key reads Unknown while keeping its detail'
+  );
+  assert.match(
+    html,
+    /<span class="dg-status-name">Redis<\/span><span class="dg-status-state dg-status-state--unknown">Unknown<\/span>/,
+    'an explicit null state also reads Unknown'
+  );
+});
+
 test('status normalizes aliases, unknown states, and degrades away when empty', () => {
   const html = renderHtml({
     title: 'status',
@@ -2289,6 +2309,23 @@ test('heatmap pulls bare rows from a data matrix and scales intensity to the row
     html,
     /<th scope="row">y<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l5">1<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l5">1<\/td>/,
     'a flat row maxes the cell level'
+  );
+});
+
+test('heatmap pads a bare row that has no data entry with zero cells', () => {
+  const html = renderHtml({
+    title: 'heatmap',
+    sections: [{ content: [{ type: 'heatmap', title: 'Load', columns: ['a', 'b'], rows: ['x', 'y'], data: [[2, 4]] }] }],
+  });
+  assert.match(
+    html,
+    /<th scope="row">x<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l3">2<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l5">4<\/td>/,
+    'the first bare row still resolves from the data matrix'
+  );
+  assert.match(
+    html,
+    /<th scope="row">y<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l0">·<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l0">·<\/td>/,
+    'a bare row missing from the data matrix draws muted zero cells'
   );
 });
 
