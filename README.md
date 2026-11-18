@@ -102,6 +102,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `checklist`  | `items[]` (string or `{text, done}` — done/pending status list)     |
 | `footnote`   | `text`, `label` (small-print end note)                              |
 | `timeline`   | `items[]` (`{time, text}` — chronological event log), `title`        |
+| `def-list`   | `items[]` (`{key, value}` — plain definition list, no card band)     |
 
 ## Data binding
 

@@ -34,9 +34,9 @@ test('dashboard runbook section exercises the remaining component library', () =
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
   // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
-  // footnote, timeline, and image — the components no other example uses —
-  // so the canonical DSL proves the full 25-component library renders in one
-  // page.
+  // footnote, timeline, def-list, and image — the components no other example
+  // uses — so the canonical DSL proves the full 26-component library renders
+  // in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -106,6 +106,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<div class="dg-timeline"><div class="dg-timeline-title">Incident timeline<\/div><ul class="dg-timeline-list"><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="09:14">09:14<\/time><span class="dg-timeline-text">Alert fires on elevated billing-queue lag<\/span><\/li><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="09:17">09:17<\/time><span class="dg-timeline-text">On-call acknowledges and pages the owner<\/span><\/li><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="09:32">09:32<\/time><span class="dg-timeline-text">Rollback of billing-worker released<\/span><\/li><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="09:41">09:41<\/time><span class="dg-timeline-text">Healthz green; queue drains to zero<\/span><\/li><li class="dg-timeline-item"><time class="dg-timeline-time" datetime="10:05">10:05<\/time><span class="dg-timeline-text">Incident window closed<\/span><\/li><\/ul><\/div>/,
     'runbook shows the incident window as a time-stamped timeline'
+  );
+  assert.match(
+    html,
+    /<dl class="dg-def-list"><div class="dg-def-list-row"><dt>Window<\/dt><dd>2026-11-17 09:14–10:05<\/dd><\/div><div class="dg-def-list-row"><dt>Root cause<\/dt><dd>Billing-worker release 2144 regression<\/dd><\/div><div class="dg-def-list-row"><dt>Action<\/dt><dd>Rolled back; canary at 100% for 30 minutes<\/dd><\/div><\/dl>/,
+    'runbook recaps the incident window in a plain definition list'
   );
 });
 
@@ -1892,6 +1897,61 @@ test('timeline escapes entries, drops blanks, and degrades to nothing', () => {
     sections: [{ content: [{ type: 'timeline', items: [{ time: '09:00', text: ' ' }, ''] }] }],
   });
   assert.ok(!allBlank.includes('<ul class="dg-timeline-list"'), 'all-blank items render no timeline');
+});
+
+test('def-list renders a plain definition list of key/value pairs', () => {
+  // Unlike kv, def-list has no bordered band — it is a <dl> for running prose.
+  // Each item is { key, value } (key aliased by label); the pairing stays in
+  // the DOM as <dt>/<dd> for assistive tech.
+  const html = renderHtml({
+    title: 'def-list',
+    sections: [{ content: [{ type: 'def-list', items: [
+      { key: 'Owner', value: 'Platform' },
+      { label: 'Rollout', value: 'canary' },
+      { key: 'Window' },
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<dl class="dg-def-list"><div class="dg-def-list-row"><dt>Owner<\/dt><dd>Platform<\/dd><\/div><div class="dg-def-list-row"><dt>Rollout<\/dt><dd>canary<\/dd><\/div><div class="dg-def-list-row"><dt>Window<\/dt><dd><\/dd><\/div><\/dl>/,
+    'def-list renders key/value (and label-aliased) rows; a term-only row keeps an empty <dd>'
+  );
+});
+
+test('def-list escapes text, drops blanks, and degrades to nothing', () => {
+  // User text is escaped; rows with an empty/whitespace-only key AND value, or
+  // scalar null/undefined items, are dropped; an all-empty or missing items
+  // list renders nothing (unlike kv, which keeps an empty container).
+  const html = renderHtml({
+    title: 'def-list',
+    sections: [{ content: [{ type: 'def-list', items: [
+      { key: 'A & B', value: '<ops>' },
+      { key: ' ', value: '' },
+      { key: '', value: '  ' },
+      null,
+      undefined,
+      'stray',
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<dt>A &amp; B<\/dt><dd>&lt;ops&gt;<\/dd>/,
+    'def-list escapes term and value text'
+  );
+  assert.match(
+    html,
+    /<dt>stray<\/dt><dd><\/dd>/,
+    'a plain string becomes a term-only row (kv-parity)'
+  );
+  const rows = html.match(/class="dg-def-list-row"/g) || [];
+  assert.strictEqual(rows.length, 2, 'only the escaped and stray rows survive');
+  const noItems = renderHtml({ title: 'def-list', sections: [{ content: [{ type: 'def-list' }] }] });
+  assert.ok(!noItems.includes('<dl class="dg-def-list">'), 'missing items render no def-list');
+  const allBlank = renderHtml({
+    title: 'def-list',
+    sections: [{ content: [{ type: 'def-list', items: [{ key: ' ', value: '' }] }] }],
+  });
+  assert.ok(!allBlank.includes('<dl class="dg-def-list">'), 'all-blank items render no def-list');
 });
 
 
