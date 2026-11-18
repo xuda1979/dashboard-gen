@@ -1070,3 +1070,79 @@ test('runtime defers chart init until DOMContentLoaded when the document is load
   onReady();
   assert.ok(figureEls[0].innerHTML.includes('<svg'), 'deferred init renders the chart once the DOM is ready');
 });
+
+test('runtime shows the no-data note when a line has no usable values', () => {
+  // A series whose rows are all non-numeric (Number() coerces each to NaN) or
+  // missing renders with no plottable point. (Note null would NOT reach this
+  // path: toPoints runs every value through Number(), and Number(null) is 0, a
+  // legitimate plotted point.) The chart must degrade to the same no-data note
+  // the empty-data path and the pie kind produce — not a hollow svg shell with
+  // grid lines and an empty d="" path.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'chart.yaml'), 'utf8');
+  const html = buildFromSource(src, 'chart.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Rubbish' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Mon', series: { a: 'oops' } },
+      { label: 'Tue', series: { a: undefined } },
+      { label: 'Wed', series: { a: 'nope' } },
+    ],
+  });
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('class="dg-note"'), 'no-data note rendered');
+  assert.ok(!out.includes('<svg'), 'no hollow svg shell with an empty series path');
+  assert.ok(!out.includes('dg-series'), 'no empty d="" series path');
+  assert.ok(!out.includes('NaN'), 'no NaN leaks into the chart');
+});
+
+test('runtime shows the no-data note when a bar chart has no usable values', () => {
+  // The bar loop skips unusable cells the same way; with every cell unusable
+  // it must render the no-data note instead of an empty plot area.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'chart.yaml'), 'utf8');
+  const html = buildFromSource(src, 'chart.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'Rubbish' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: 'nope' } },
+      { label: 'Q2', series: { a: undefined } },
+      { label: 'Q3', series: { a: 'oops' } },
+    ],
+  });
+  const out = figureEls[0].innerHTML;
+  assert.ok(out.includes('class="dg-note"'), 'no-data note rendered');
+  assert.ok(!out.includes('<svg'), 'no hollow svg shell');
+  assert.ok(!out.includes('dg-bar'), 'no zero-height bars');
+  assert.ok(!out.includes('NaN'), 'no NaN leaks into the chart');
+});
+
+test('runtime drops a line series that has no usable values without a hollow path', () => {
+  // Mixed validity: one series plots normally while a second series is all
+  // non-numeric. The invalid series must not emit an empty d="" path element —
+  // it keeps its legend entry (the key names it) but draws nothing. The chart
+  // itself still renders because the valid series has points.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'chart.yaml'), 'utf8');
+  const html = buildFromSource(src, 'chart.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Mixed' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Mon', series: { a: 10, b: 'oops' } },
+      { label: 'Tue', series: { a: 14 } },
+      { label: 'Wed', series: { a: 9, b: 'nope' } },
+    ],
+  });
+  const out = figureEls[0].innerHTML;
+  const paths = out.match(/<path class="dg-series"/g) || [];
+  assert.strictEqual(paths.length, 1, 'only the valid series draws a path');
+  assert.ok(!/<path class="dg-series" d="[^"]*NaN/.test(out), 'no NaN in any path');
+  assert.ok(!/d=""/.test(out), 'no empty d attribute on any path');
+  assert.ok(out.includes('>a</span>') && out.includes('>b</span>'), 'legend still names both series');
+});
