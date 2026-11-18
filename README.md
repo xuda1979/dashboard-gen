@@ -86,6 +86,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `card`       | `title`, `text`, `intent` (primary/success/danger/warning) |
 | `stat`       | `value`, `label`, `prefix`/`suffix`, `delta`, `progress` (KPI metric) |
 | `stat-list`  | `items[]` (`label`, `value`, `prefix`/`suffix`, `delta`), `caption` (KPI row table) |
+| `toc`        | `label` (in-page table of contents linking every section title) |
 | `badge`      | `text`, `tone` (neutral/primary/success/warning/danger) |
 | `divider`    | —                                                       |
 | `quote`      | `text`, `cite`                                          |

@@ -33,9 +33,9 @@ test('landing example produces a single HTML page', () => {
 test('dashboard runbook section exercises the remaining component library', () => {
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
-  // quote, code, badge, kv, details, tabs, stat-list, and image — the
+  // quote, code, badge, kv, details, tabs, stat-list, toc, and image — the
   // components no other example uses — so the canonical DSL proves the full
-  // 21-component library renders in one page.
+  // 22-component library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -85,6 +85,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<div class="dg-scroll"><table class="dg-statlist" aria-label="Release health checks"><tbody>\n<tr class="dg-statlist-row"><th scope="row">Builds<\/th><td class="dg-statlist-value">214<\/td><td class="dg-statlist-delta dg-statlist-delta--good">▲ 5<\/td><\/tr>\n<tr class="dg-statlist-row"><th scope="row">Deploys \/ day<\/th><td class="dg-statlist-value">12<\/td><td class="dg-statlist-delta dg-statlist-delta--neutral">▼ 1<\/td><\/tr>\n<tr class="dg-statlist-row"><th scope="row">Rollbacks<\/th><td class="dg-statlist-value">0<\/td><td class="dg-statlist-delta dg-statlist-delta--neutral">0<\/td><\/tr>\n<tr class="dg-statlist-row"><th scope="row">Open incidents<\/th><td class="dg-statlist-value">#2<\/td><td class="dg-statlist-delta dg-statlist-delta--bad">▲ 1<\/td><\/tr>\n<\/tbody><\/table><\/div>/,
     'runbook renders the KPI row table with a good/neutral/bad delta band'
+  );
+  assert.match(
+    html,
+    /<nav class="dg-toc" aria-label="On this page"><ul><li><a class="dg-toc-link" href="#s-overview">Overview<\/a><\/li><li><a class="dg-toc-link" href="#s-metrics">Metrics<\/a><\/li><li><a class="dg-toc-link" href="#s-releases">Releases<\/a><\/li><li><a class="dg-toc-link" href="#s-storage">Storage<\/a><\/li><li><a class="dg-toc-link" href="#s-runbook">Runbook<\/a><\/li><\/ul><\/nav>/,
+    'overview embeds an auto-generated contents nav linking every section'
   );
 });
 
@@ -1644,6 +1649,76 @@ test('stat-list degrades without caption or items and escapes row fields', () =>
     html,
     /<tr class="dg-statlist-row"><th scope="row">plain-string row<\/th><td class="dg-statlist-value"><\/td><\/tr>/,
     'a string item renders a label row with an empty value and no delta cell'
+  );
+});
+
+test('toc renders ordered links to every titled section with shared anchors', () => {
+  // A toc block lists every titled section as a link to the page's collision-free
+  // s-<slug> anchors (the same ids the section titles and auto nav use), so the
+  // contents nav always resolves. `label` names the landmark; without one the
+  // fallback "Contents" keeps the <nav> compliant with the a11y nav rule.
+  const doc = {
+    title: 'toc',
+    sections: [
+      { title: 'Overview', content: [{ type: 'paragraph', text: 'a' }] },
+      { title: 'Deep Dive', content: [{ type: 'paragraph', text: 'b' }] },
+      { title: 'Overview', content: [{ type: 'toc', label: 'Jump to' }] },
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.match(
+    html,
+    /<nav class="dg-toc" aria-label="Jump to"><ul><li><a class="dg-toc-link" href="#s-overview">Overview<\/a><\/li><li><a class="dg-toc-link" href="#s-deep-dive">Deep Dive<\/a><\/li><li><a class="dg-toc-link" href="#s-overview-2">Overview<\/a><\/li><\/ul><\/nav>/,
+    'toc links every section with the deduped shared anchors'
+  );
+  // The toc anchors resolve: each href id exists on a section title.
+  const hrefs = [...html.matchAll(/<a class="dg-toc-link" href="#([^"]+)"/g)].map((m) => m[1]);
+  for (const h of hrefs) {
+    assert.ok(html.includes(`id="${h}"`), `toc link #${h} resolves to a section title`);
+  }
+});
+
+test('toc defaults its aria-label, escapes titles, and degrades to nothing', () => {
+  // Without `label` the contents nav is still announced (a11y requires every
+  // <nav> to carry an aria-label); titles are escaped like all user text; and a
+  // page with no titled sections renders nothing for the toc (mirroring the auto
+  // nav, which also only appears when there is a section to link).
+  const html = renderHtml({
+    title: 'toc',
+    sections: [{ title: 'Run <book>', content: [{ type: 'toc' }] }],
+  });
+  assert.match(
+    html,
+    /<nav class="dg-toc" aria-label="Contents"><ul><li><a class="dg-toc-link" href="#s-run-book">Run &lt;book&gt;<\/a><\/li><\/ul><\/nav>/,
+    'escaped title links out under the default Contents label'
+  );
+  // A toc block whose sections all lack titles still renders nothing (the links
+  // list is empty), so the block degrades away instead of emitting dead markup.
+  const empty = renderHtml({
+    title: 'toc',
+    sections: [{ content: [{ type: 'paragraph', text: 'a' }, { type: 'toc' }] }],
+  });
+  assert.ok(!empty.includes('<nav class="dg-toc"'), 'no titled sections renders no toc block');
+  const untitled = renderHtml({ title: 'toc' });
+  assert.ok(!untitled.includes('<nav class="dg-toc"'), 'no sections key renders no toc block');
+});
+
+test('toc in a hero reflects the page sections', () => {
+  // The hero content shares the same state.sections/sectionAnchors threading as
+  // the layout widgets, so a toc block placed in the hero lists the page too.
+  const doc = {
+    title: 'toc-hero',
+    hero: [{ type: 'toc' }],
+    sections: [
+      { title: 'Alpha', content: [{ type: 'paragraph', text: 'a' }] },
+      { title: 'Beta', content: [{ type: 'paragraph', text: 'b' }] },
+    ],
+  };
+  const html = renderHtml(doc);
+  assert.match(
+    html,
+    /<nav class="dg-toc" aria-label="Contents"><ul><li><a class="dg-toc-link" href="#s-alpha">Alpha<\/a><\/li><li><a class="dg-toc-link" href="#s-beta">Beta<\/a><\/li><\/ul><\/nav>/,
+    'hero toc links every section'
   );
 });
 

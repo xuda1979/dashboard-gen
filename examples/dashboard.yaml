@@ -26,6 +26,9 @@ sections:
       - type: paragraph
         text: Environments are reported by their last known state.
 
+      - type: toc
+        label: On this page
+
   - title: Metrics
     content:
       - type: grid
