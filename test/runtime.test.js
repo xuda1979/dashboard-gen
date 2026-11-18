@@ -904,3 +904,72 @@ test('runtime coerces non-numeric pie values to zero and skips empty-label rows'
   assert.ok(!mapOut.includes('Bad'), 'non-numeric key absent from slices and legend');
   assert.ok(!rowsOut.includes('NaN') && !mapOut.includes('NaN'), 'no NaN leaks into either pie');
 });
+
+test('runtime reports the HTTP status when a fetch responds without ok', async () => {
+  // A rejected fetch covers the network-failure path, but a response that
+  // resolves with ok:false (404 file, 500 server error) takes a separate
+  // branch: the runtime must throw "HTTP <status>" and surface it in the
+  // figure's error message, then not render.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'fetch.yaml'), 'utf8');
+  const html = buildFromSource(src, 'fetch.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Price' },
+  ]);
+  const w = {
+    document: dom,
+    console,
+    fetch: () => Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve([]) }),
+    Promise,
+    setTimeout,
+    clearTimeout,
+  };
+  w.window = w;
+  w.__DG_DATA__ = {};
+  const fn = new Function('window', 'document', 'fetch', code);
+  fn.call(w, w, dom, w.fetch);
+  await new Promise((r) => setTimeout(r, 0));
+  const out = figureEls[0].innerHTML;
+  assert.match(out, /Failed to load chart data/, 'an ok:false response surfaces a load error');
+  assert.match(out, /HTTP 500/, 'the status code appears in the message');
+  assert.ok(out.includes('dg-error'), 'error is marked with the dg-error class');
+});
+
+test('runtime defers chart init until DOMContentLoaded when the document is loading', () => {
+  // init() runs immediately when readyState is 'complete' (inline scripts on a
+  // finished document), but for a still-loading document it must register a
+  // DOMContentLoaded handler and render only then — otherwise charts would
+  // query a half-built DOM. The handler must be an actual listener, not an
+  // eager render.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'chart.yaml'), 'utf8');
+  const html = buildFromSource(src, 'chart.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+  const data = extractData(html);
+
+  const figureEls = [
+    {
+      attrs: { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'DAU this week' },
+      innerHTML: '',
+      getAttribute(name) { return this.attrs[name] !== undefined ? this.attrs[name] : null; },
+      set innerHTML(v) { this._html = v; },
+      get innerHTML() { return this._html || ''; },
+    },
+  ];
+  let onReady = null;
+  const dom = {
+    readyState: 'loading',
+    addEventListener(name, fn) { if (name === 'DOMContentLoaded') onReady = fn; },
+    querySelectorAll() { return figureEls; },
+  };
+  const sandbox = { document: dom, console, Promise, setTimeout, clearTimeout, __DG_DATA__: data };
+  sandbox.window = sandbox;
+  sandbox.window.__DG_DATA__ = data;
+  const fn = new Function('window', 'document', code);
+  fn.call(sandbox.window, sandbox.window, dom);
+
+  assert.strictEqual(figureEls[0].innerHTML, '', 'no chart renders while the document is still loading');
+  assert.strictEqual(typeof onReady, 'function', 'a DOMContentLoaded handler was registered');
+  onReady();
+  assert.ok(figureEls[0].innerHTML.includes('<svg'), 'deferred init renders the chart once the DOM is ready');
+});
