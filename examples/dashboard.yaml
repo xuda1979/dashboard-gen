@@ -188,6 +188,14 @@ sections:
             delta: { value: 0, tone: neutral }
           - { label: Open incidents, prefix: "#", value: 2, delta: { value: 1, tone: bad } }
 
+      - type: checklist
+        items:
+          - { text: Billing-queue drained, done: true }
+          - { text: Healthz green after rollback, done: true }
+          - { text: Canary at 100% for 30 minutes, done: true }
+          - On-call notified of the incident window
+          - Post-incident review scheduled
+
       - type: image
         file: ops-console.svg
         caption: Ops Console status strip

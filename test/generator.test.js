@@ -33,9 +33,9 @@ test('landing example produces a single HTML page', () => {
 test('dashboard runbook section exercises the remaining component library', () => {
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
-  // quote, code, badge, kv, details, tabs, stat-list, toc, and image — the
-  // components no other example uses — so the canonical DSL proves the full
-  // 22-component library renders in one page.
+  // quote, code, badge, kv, details, tabs, stat-list, toc, checklist, and
+  // image — the components no other example uses — so the canonical DSL proves
+  // the full 23-component library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -90,6 +90,11 @@ test('dashboard runbook section exercises the remaining component library', () =
     html,
     /<nav class="dg-toc" aria-label="On this page"><ul><li><a class="dg-toc-link" href="#s-overview">Overview<\/a><\/li><li><a class="dg-toc-link" href="#s-metrics">Metrics<\/a><\/li><li><a class="dg-toc-link" href="#s-releases">Releases<\/a><\/li><li><a class="dg-toc-link" href="#s-storage">Storage<\/a><\/li><li><a class="dg-toc-link" href="#s-runbook">Runbook<\/a><\/li><\/ul><\/nav>/,
     'overview embeds an auto-generated contents nav linking every section'
+  );
+  assert.match(
+    html,
+    /<ul class="dg-checklist"><li class="dg-checklist-item dg-checklist-item--done"><span class="dg-checklist-mark">✓<\/span><span class="dg-checklist-text">Billing-queue drained<\/span><\/li><li class="dg-checklist-item dg-checklist-item--done"><span class="dg-checklist-mark">✓<\/span><span class="dg-checklist-text">Healthz green after rollback<\/span><\/li><li class="dg-checklist-item dg-checklist-item--done"><span class="dg-checklist-mark">✓<\/span><span class="dg-checklist-text">Canary at 100% for 30 minutes<\/span><\/li><li class="dg-checklist-item dg-checklist-item--pending"><span class="dg-checklist-mark">○<\/span><span class="dg-checklist-text">On-call notified of the incident window<\/span><\/li><li class="dg-checklist-item dg-checklist-item--pending"><span class="dg-checklist-mark">○<\/span><span class="dg-checklist-text">Post-incident review scheduled<\/span><\/li><\/ul>/,
+    'runbook closes with a done/pending status checklist'
   );
 });
 
@@ -1720,6 +1725,61 @@ test('toc in a hero reflects the page sections', () => {
     /<nav class="dg-toc" aria-label="Contents"><ul><li><a class="dg-toc-link" href="#s-alpha">Alpha<\/a><\/li><li><a class="dg-toc-link" href="#s-beta">Beta<\/a><\/li><\/ul><\/nav>/,
     'hero toc links every section'
   );
+});
+
+test('checklist renders done and pending items with state markers', () => {
+  // A checklist is a static status list: each item gets a state class and a
+  // glyph marker (✓ done, ○ pending) in the DOM — the same way stat deltas
+  // carry ▲/▼ — so the state is visible without any interactive checkbox
+  // semantics or JS. Object items with `done: true` land in the done state;
+  // bare-string items default to pending.
+  const html = renderHtml({
+    title: 'checklist',
+    sections: [{
+      content: [{
+        type: 'checklist',
+        items: [
+          { text: 'Queue drained', done: true },
+          { text: 'Healthz green' },
+          'On-call notified',
+          { text: 'Review scheduled', done: false },
+        ],
+      }],
+    }],
+  });
+  assert.match(
+    html,
+    /<ul class="dg-checklist"><li class="dg-checklist-item dg-checklist-item--done"><span class="dg-checklist-mark">✓<\/span><span class="dg-checklist-text">Queue drained<\/span><\/li><li class="dg-checklist-item dg-checklist-item--pending"><span class="dg-checklist-mark">○<\/span><span class="dg-checklist-text">Healthz green<\/span><\/li><li class="dg-checklist-item dg-checklist-item--pending"><span class="dg-checklist-mark">○<\/span><span class="dg-checklist-text">On-call notified<\/span><\/li><li class="dg-checklist-item dg-checklist-item--pending"><span class="dg-checklist-mark">○<\/span><span class="dg-checklist-text">Review scheduled<\/span><\/li><\/ul>/,
+    'done items carry ✓ markers, pending strings and objects carry ○ markers'
+  );
+});
+
+test('checklist escapes texts, drops blank entries, and degrades to nothing', () => {
+  // Item text is escaped like all user text; empty-string items and non-string
+  // scalars fall away (so an object missing `text` never emits a bare li); and
+  // when no usable entries remain the whole block renders nothing instead of
+  // dead markup. A missing `items` key likewise degrades away.
+  const html = renderHtml({
+    title: 'checklist',
+    sections: [{
+      content: [{
+        type: 'checklist',
+        items: ['Clean <queue>', { text: '' }, 42, null, { text: 'Logs archived', done: true }],
+      }],
+    }],
+  });
+  assert.match(
+    html,
+    /<ul class="dg-checklist"><li class="dg-checklist-item dg-checklist-item--pending"><span class="dg-checklist-mark">○<\/span><span class="dg-checklist-text">Clean &lt;queue&gt;<\/span><\/li><li class="dg-checklist-item dg-checklist-item--done"><span class="dg-checklist-mark">✓<\/span><span class="dg-checklist-text">Logs archived<\/span><\/li><\/ul>/,
+    'markup-anchored: escaped text plus only the non-empty entries survive'
+  );
+  const empty = renderHtml({
+    title: 'checklist',
+    sections: [{ content: [{ type: 'checklist', items: [{}, ' ', { text: '' }] }] }],
+  });
+  assert.ok(!empty.includes('<ul class="dg-checklist"'), 'all-blank items render no checklist');
+  const missing = renderHtml({ title: 'checklist', sections: [{ content: [{ type: 'checklist' }] }] });
+  assert.ok(!missing.includes('<ul class="dg-checklist"'), 'missing items renders no checklist');
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {

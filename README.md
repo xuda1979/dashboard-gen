@@ -99,6 +99,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `image`      | `file` (path, inlined as data URI), `alt`, `caption`, `width`/`height` |
 | `details`    | `summary`/`title`, `content` (components or strings), `open`, `text` (collapsible block) |
 | `tabs`       | `tabs[]` (`label` + `content`/`text`), `active` (radio-based, zero-JS tabs) |
+| `checklist`  | `items[]` (string or `{text, done}` — done/pending status list)     |
 
 ## Data binding
 
