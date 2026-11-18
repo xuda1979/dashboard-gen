@@ -373,6 +373,61 @@ test('a11y-check rejects any role="img" element missing an accessible name', () 
   assert.ok(!/without an accessible name/.test(resById.stdout), 'no missing-name problem on stdout');
 });
 
+test('a11y-check rejects a <th> that declares no scope', () => {
+  // The README documents semantic tables as a generated invariant: header cells
+  // carry scope="col" and row-label cells scope="row" (stat lists, row-header
+  // first cell). A bare <th> with no scope breaks that contract for screen
+  // readers, so the lint must fail it — hand-written HTML or a future
+  // component that forgets scope gets caught the same way. Tables rendered by
+  // the generator (dg-statlist, dg-table) always emit scope, so this is a
+  // zero-false-positive rule on generated output.
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dg-a11y-thscope-'));
+  const bare = path.join(tmp, 'bare.html');
+  fs.writeFileSync(
+    bare,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main">
+    <table>
+      <tr><th>No scope</th></tr>
+    </table>
+  </main>
+</body>
+</html>`
+  );
+  const resBare = runCheck(bare);
+  assert.strictEqual(resBare.ok, false, 'a scopeless <th> fails the check');
+  assert.strictEqual(resBare.code, 1, 'exit code 1');
+  assert.match(resBare.stderr, /<th> without scope:/, 'reports the bare <th>');
+
+  // The same table with proper scope attributes must pass.
+  const scoped = path.join(tmp, 'scoped.html');
+  fs.writeFileSync(
+    scoped,
+    `<!DOCTYPE html>
+<html lang="en">
+<head><title>ok</title></head>
+<body>
+  <a class="skip-link" href="#main">Skip</a>
+  <nav aria-label="Main"><a href="#s">S</a></nav>
+  <main id="main">
+    <table>
+      <tr><th scope="col">Name</th><th scope="col">Value</th></tr>
+      <tr><th scope="row">Alpha</th><td>1</td></tr>
+    </table>
+  </main>
+</body>
+</html>`
+  );
+  const resScoped = runCheck(scoped);
+  assert.strictEqual(resScoped.ok, true, 'a scope-annotated table passes');
+  assert.ok(!/<th> without scope/.test(resScoped.stdout), 'no scope problem on stdout');
+});
+
 test('a11y-check skips contrast when a palette carries no matching color token', () => {
   // The tool lints arbitrary HTML, not only generator output: an input that
   // declares --page-bg but no --text-color (or vice versa) must skip that
