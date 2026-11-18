@@ -105,6 +105,7 @@ Sections may also carry `hero:` (a sub-hero strip) in addition to `content:`.
 | `def-list`   | `items[]` (`{key, value}` — plain definition list, no card band)     |
 | `stepper`    | `items[]` (string or `{text}` steps), `current` (0-based — step-marked progress) |
 | `sparkline`  | `data` (numbers, `[label, value]`/`[value]`, `{value}`/`{label, value}` — build-time SVG trend), `title`, `caption` |
+| `status`     | `items[]` (string or `{name, state, detail}` — service-health list; states healthy/degraded/down/maintenance), `title` |
 
 ## Data binding
 

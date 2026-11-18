@@ -34,9 +34,9 @@ test('dashboard runbook section exercises the remaining component library', () =
   // The flagship example doubles as the component showcase: alongside the
   // grid/stat/table/chart sections it now renders callout, steps, divider,
   // quote, code, badge, kv, details, tabs, stat-list, toc, checklist,
-  // footnote, timeline, def-list, stepper, image, and sparkline — the
+  // footnote, timeline, def-list, stepper, image, sparkline, and status — the
   // components no other example uses — so the canonical DSL proves the full
-  // 28-component library renders in one page.
+  // 29-component library renders in one page.
   const html = buildFixture('dashboard');
   assert.match(html, /<a class="dg-navlink" href="#s-runbook">Runbook<\/a>/,
     'nav links the runbook section');
@@ -2111,6 +2111,85 @@ test('sparkline escapes title and caption, and flat series keeps a visible line'
     'a flat series still draws a line (range clamps to 1)'
   );
   assert.match(html, /aria-label="Q1 &lt;2026&gt;"/, 'figure label prefers the caption');
+});
+
+test('status renders a service-health list with the state spelled as text', () => {
+  // Status is a static list of services and their last-known state; the state
+  // is always visible text (never color-only, a11y check 6) with the dot a
+  // decorative aria-hidden marker, so the strip reads without color or JS.
+  const html = renderHtml({
+    title: 'status',
+    sections: [{ content: [{ type: 'status', title: 'Environment health', items: [
+      { name: 'Production API', state: 'healthy', detail: 'p99 43ms' },
+      { name: 'Billing worker', state: 'degraded' },
+      'EU database primary',
+    ] }] }],
+  });
+  assert.match(html, /<div class="dg-status"><div class="dg-status-title">Environment health<\/div><ul class="dg-status-list">/, 'opens with a title and semantic list');
+  assert.match(
+    html,
+    /<li class="dg-status-item dg-status-item--healthy"><span class="dg-status-dot dg-status-dot--healthy" aria-hidden="true"><\/span><span class="dg-status-name">Production API<\/span><span class="dg-status-state dg-status-state--healthy">Healthy<\/span><span class="dg-status-detail">p99 43ms<\/span><\/li>/,
+    'healthy item spells its state and keeps the dot decorative'
+  );
+  assert.match(
+    html,
+    /<li class="dg-status-item dg-status-item--degraded"><span class="dg-status-dot dg-status-dot--degraded" aria-hidden="true"><\/span><span class="dg-status-name">Billing worker<\/span><span class="dg-status-state dg-status-state--degraded">Degraded<\/span><\/li>/,
+    'degraded item omits detail when absent'
+  );
+  assert.match(
+    html,
+    /<li class="dg-status-item dg-status-item--unknown"><span class="dg-status-dot dg-status-dot--unknown" aria-hidden="true"><\/span><span class="dg-status-name">EU database primary<\/span><span class="dg-status-state dg-status-state--unknown">Unknown<\/span><\/li>/,
+    'a bare string item defaults to an unknown state'
+  );
+});
+
+test('status normalizes aliases, unknown states, and degrades away when empty', () => {
+  const html = renderHtml({
+    title: 'status',
+    sections: [{ content: [{ type: 'status', items: [
+      { service: 'Search index', state: 'MAINTENANCE' },
+      { name: 'Log pipeline', state: 'flapping', detail: 'restart loop' },
+      { name: '', state: 'down' },
+      ' ',
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<span class="dg-status-name">Search index<\/span><span class="dg-status-state dg-status-state--maintenance">Maintenance<\/span>/,
+    '`service` aliases `name` and state normalizes case'
+  );
+  assert.match(
+    html,
+    /<span class="dg-status-name">Log pipeline<\/span><span class="dg-status-state dg-status-state--unknown">flapping<\/span><span class="dg-status-detail">restart loop<\/span>/,
+    'an unrecognized state surfaces its raw text as the label'
+  );
+  assert.ok(!html.includes('dg-status-item--down'), 'blank/non-object items drop out');
+
+  const missing = renderHtml({ title: 'status', sections: [{ content: [{ type: 'status' }] }] });
+  assert.ok(!missing.includes('class="dg-status"'), 'missing items render no list');
+  const nonArray = renderHtml({ title: 'status', sections: [{ content: [{ type: 'status', items: 'probe' }] }] });
+  assert.ok(!nonArray.includes('class="dg-status"'), 'non-array items render no list');
+});
+
+test('status escapes names, details, and unknown state text', () => {
+  const html = renderHtml({
+    title: 'status',
+    sections: [{ content: [{ type: 'status', items: [
+      { name: 'A & B <team>', state: 'weird <flag>', detail: 'Q1 <2026>' },
+    ] }] }],
+  });
+  assert.match(html, /<span class="dg-status-name">A &amp; B &lt;team&gt;<\/span>/, 'name is escaped');
+  assert.match(html, /<span class="dg-status-state dg-status-state--unknown">weird &lt;flag&gt;<\/span>/, 'unknown state text is escaped');
+  assert.match(html, /<span class="dg-status-detail">Q1 &lt;2026&gt;<\/span>/, 'detail is escaped');
+});
+
+test('status renders as a labelled figure in the overview example', () => {
+  const html = buildFixture('dashboard');
+  assert.match(
+    html,
+    /<div class="dg-status"><div class="dg-status-title">Environment health<\/div><ul class="dg-status-list">[\s\S]*<span class="dg-status-name">Production API<\/span><span class="dg-status-state dg-status-state--healthy">Healthy<\/span>[\s\S]*<span class="dg-status-name">EU database primary<\/span><span class="dg-status-state dg-status-state--down">Down<\/span>[\s\S]*<\/ul><\/div>/,
+    'overview lists each environment with its last-known state'
+  );
 });
 
 test('fallbacks: card title object, headline level, badge tone', () => {

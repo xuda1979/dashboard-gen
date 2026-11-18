@@ -26,6 +26,22 @@ sections:
       - type: paragraph
         text: Environments are reported by their last known state.
 
+      - type: status
+        title: Environment health
+        items:
+          - name: Production API
+            state: healthy
+            detail: p99 43ms over the last 10 minutes
+          - name: Billing worker
+            state: degraded
+            detail: Queue lag 1.2 minutes
+          - name: EU database primary
+            state: down
+            detail: Failover in progress
+          - name: Search index
+            state: maintenance
+            detail: Reindex window until 23:00
+
       - type: toc
         label: On this page
 
