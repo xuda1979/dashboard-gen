@@ -202,6 +202,60 @@ test('runtime degrades structured (object/array) chart labels instead of spellin
   assert.ok(pie.includes('>X</span>') && pie.includes('>Y</span>'), 'slice names come from series keys, not the degraded label');
 });
 
+test('runtime degrades structured (object/array) series cells instead of fabricating numeric readings', () => {
+  // Number([]) is 0, Number([5]) is 5, and Number({x:1}) is NaN — a structured
+  // value cell that survives toNum's coercion would fabricate a reading (a
+  // phantom bar/point/slice) in the same fabrication class as 'true'/'Infinity'.
+  // Each structured cell must degrade to absent, leaving only the real readings.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: L\n        data:\n          - { label: a, series: { x: 1 } }\n      - type: chart\n        kind: bar\n        title: B\n        data:\n          - { label: a, series: { x: 1 } }\n      - type: chart\n        kind: pie\n        title: P\n        data:\n          - { label: a, series: { x: 1 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'L' },
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-1', 'data-chart-title': 'B' },
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-2', 'data-chart-title': 'P' },
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-3', 'data-chart-title': 'P2' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'n', series: { x: [] } },       // Number([]) === 0
+      { label: 'm', series: { x: [5] } },      // Number([5]) === 5
+      { label: 'o', series: { x: {} } },       // Number({}) === NaN
+      { label: 'real', series: { x: 7 } },
+    ],
+    'chart-1': [
+      { label: 'n', series: { x: [3] } },      // Number([3]) === 3, must not draw a bar
+      { label: 'real', series: { x: 9 } },
+    ],
+    'chart-2': [
+      { label: 'n', series: { x: [] } },
+      { label: 'real', series: { x: 8 } },
+      { label: 'm', series: { x: [4] } },      // must not draw a slice
+    ],
+    'chart-3': [{ label: 'big', series: { X: 10, Y: [6] } }], // Y must not draw a slice
+  });
+  const line = figureEls[0].innerHTML;
+  const bar = figureEls[1].innerHTML;
+  const pie = figureEls[2].innerHTML;
+  const oneMap = figureEls[3].innerHTML;
+  assert.strictEqual((line.match(/class="dg-series"/g) || []).length, 1,
+    'only the real reading draws a line path');
+  assert.ok((line.match(/<title>/g) || []).length === 0, 'no bar-style tooltip in a line chart');
+  assert.strictEqual((bar.match(/class="dg-bar"/g) || []).length, 1,
+    'array series cells do not fabricate bars');
+  assert.ok(bar.includes('9'), 'the real bar value still renders');
+  assert.strictEqual((pie.match(/class="dg-slice"/g) || []).length, 1,
+    'array series cells do not fabricate pie slices');
+  assert.ok(pie.includes('8'), 'the real pie value still renders');
+  assert.ok(!pie.includes('<title>n'), 'no title tooltip for the degraded slice');
+  assert.strictEqual((oneMap.match(/class="dg-slice"/g) || []).length, 1,
+    'oneMap ignores structured values and draws only the real series key');
+  assert.ok(oneMap.includes('>X</span>') && !oneMap.includes('>Y</span>'),
+    'oneMap slice names keep only the real key');
+});
+
 test('runtime compacts large y-axis ticks with k/M shorthand', () => {
   // fmt() renders ticks >= 1e3 with a k suffix and >= 1e6 with M; the line
   // chart's y-axis must surface those compacted labels so a 2.5k-value series
