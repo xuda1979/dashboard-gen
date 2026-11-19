@@ -1091,6 +1091,47 @@ test('page theme dark overrides merge into the dark-mode CSS block', () => {
   );
 });
 
+test('degenerate theme tokens degrade to the theme default instead of raw literals', () => {
+  // Theme overrides are emitted verbatim into <style> custom-property
+  // declarations, so a boolean/null/structured/non-finite/blank override would
+  // spell `--x: true;`, `--accent: [object Object];` or a hollow declaration
+  // into the page and poison every var() consumer. Each must degrade to the
+  // theme default instead; typed finite values still win.
+  const doc = {
+    title: 't',
+    theme: {
+      accent: { nested: 1 },
+      pageBg: '#ffffff',
+      mutedColor: null,
+      radius: true,
+      fontFamily: false,
+      cardBg: Infinity,
+      borderColor: -Infinity,
+      dark: { pageBg: NaN, accent: '  #38bdf8  ', cardBg: ['a', 'b'] },
+    },
+    sections: [],
+  };
+  const html = renderHtml(doc);
+  assert.match(html, /--accent: #2563eb;/, 'structured override drops to the default accent');
+  assert.match(html, /--page-bg: #ffffff;/, 'typed override emits verbatim');
+  assert.match(html, /--muted-color: #5f6772;/, 'nullish override drops to the default muted');
+  assert.match(html, /--radius: 8px;/, 'boolean override drops to the default radius');
+  assert.match(html, /--font-family: system-ui/, 'false override drops to the default font');
+  assert.match(html, /--card-bg: #ffffff;/, 'non-finite override drops to the default card bg');
+  assert.match(html, /--border-color: #e5e7eb;/, 'negative-infinity override drops to the default border');
+  assert.ok(
+    !/[\[[{]object Object[\]}]]/.test(html) &&
+      !/--[a-z-]+: (true|false|Infinity|-Infinity|NaN|null);/.test(html) &&
+      !/--[a-z-]+:\s*;/.test(html),
+    'no raw literal or hollow custom-property declarations leak into the page'
+  );
+  assert.ok(
+    /@media \(prefers-color-scheme: dark\) \{[\s\S]*?--page-bg: #111827;[\s\S]*?--card-bg: #1f2937;[\s\S]*?\}/.test(html),
+    'dark NaN/array overrides drop to dark defaults'
+  );
+  assert.match(html, /--accent: #38bdf8;/, 'dark typed override trims and emits');
+});
+
 test('every chart figure carries a role and accessible name', () => {
   const html = buildFixture('chart');
   const figures = html.match(/<div class="dg-figure dg-chart"[^>]*>/g) || [];
