@@ -3721,6 +3721,83 @@ test('bare-label surfaces treat non-finite numeric values as absent, not literal
   ], 'grid scalar NaN cell degrades to empty; the typed string, text and a real number stay');
 });
 
+test('text surfaces treat a raw boolean as absent, not literal text', () => {
+  // components.js normalizeText: String(true) === 'true' used to spill a
+  // boolean literal into every text surface — a stat value read "true", a
+  // stat-list/kv/grid/table cell spelled "true", a status state labelled
+  // "true" instead of degrading to Unknown, and button/link/title defaults
+  // were skipped (`normalizeText(c.text || 'Button')` falls back on a boolean
+  // truthiness, so a `text: true` tagged the button instead of defaulting).
+  // A raw boolean is now absent like a nullish/non-finite value, so the
+  // malformed cell degrades away and the fallback defaults re-apply; typed
+  // strings and finite numbers are untouched.
+  const html = renderHtml({
+    title: 'bool-text',
+    sections: [{
+      content: [
+        { type: 'stat', label: 'Flag', value: true },
+        { type: 'stat-list', items: [true, { label: 'Real', value: '2' }, { label: 'ObjBool', value: false }] },
+        { type: 'kv', items: [true, { key: 'Real', value: 'v' }] },
+        { type: 'def-list', items: [false, { key: 'Real2', value: 'w' }] },
+        { type: 'grid', columns: 2, items: [true, 'plain', 42] },
+        { type: 'table', rows: [[true, 'a'], ['b', false]] },
+        { type: 'status', items: [{ name: 'Flag', state: true }, { name: 'Up', state: 'healthy' }] },
+        { type: 'details', title: 'D', content: [true, 'real text'] },
+        { type: 'tabs', tabs: [{ label: 'T', content: [false, 'real'] }] },
+        { type: 'button', text: true },
+        { type: 'link', text: true },
+        { type: 'chart', kind: 'line', title: true, data: [['x', 1]] },
+        { type: 'sparkline', title: false, data: [1, 2, 3] },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  assert.match(body, /class="dg-stat" role="img" aria-label="Flag: "/,
+    'a boolean stat value degrades like a missing one, never a literal "true" figure');
+  assert.deepEqual(
+    body.match(/class="dg-statlist-row"><th scope="row">([^<]*)<\/th>/g) || [],
+    ['class="dg-statlist-row"><th scope="row"></th>', 'class="dg-statlist-row"><th scope="row">Real</th>', 'class="dg-statlist-row"><th scope="row">ObjBool</th>'],
+    'bare boolean stat-list items degrade to an empty label row; the real ones stay'
+  );
+  assert.deepEqual(body.match(/class="dg-statlist-value">([^<]*)/g) || [], [
+    'class="dg-statlist-value">',
+    'class="dg-statlist-value">2',
+    'class="dg-statlist-value">',
+  ], 'a boolean stat-list row value degrades away; the real value stays');
+  assert.ok(!body.includes('dg-kv-row"><dt>true</dt>'), 'a bare boolean kv item drops like a nullish one, no literal term');
+  assert.deepEqual(body.match(/class="dg-kv-row"><dt>([^<]*)<\/dt><dd>([^<]*)/g) || [],
+    ['class="dg-kv-row"><dt>Real</dt><dd>v'], 'kv real pairs survive the boolean item');
+  assert.deepEqual(body.match(/class="dg-def-list-row"><dt>([^<]*)<\/dt><dd>([^<]*)/g) || [],
+    ['class="dg-def-list-row"><dt>Real2</dt><dd>w'], 'def-list drops a bare boolean item outright');
+  assert.deepEqual(body.match(/class="dg-cell">([^<]*)<\/div>/g) || [], [
+    'class="dg-cell"></div>',
+    'class="dg-cell">plain</div>',
+    'class="dg-cell">42</div>',
+  ], 'grid boolean cell degrades to empty; text and a real number stay');
+  const boolTable = body.match(/<table class="dg-table">[\s\S]*?<\/table>/)[0];
+  assert.strictEqual((boolTable.match(/<th scope="row">([^<]*)<\/th>/) || [])[1], '',
+    'a boolean array-table cell degrades to an empty row header');
+  assert.ok(!boolTable.includes('<td>true</td>') && !boolTable.includes('<td>false</td>'),
+    'no literal boolean text leaks into array-table cells');
+  assert.deepEqual(body.match(/dg-status-state dg-status-state--([a-z]+)">([^<]*)<\/span>/g) || [], [
+    'dg-status-state dg-status-state--unknown">Unknown</span>',
+    'dg-status-state dg-status-state--healthy">Healthy</span>',
+  ], 'a boolean status state degrades to the Unknown fallback, never a literal "true" label');
+  assert.match(body, /<div class="dg-details-body"><p class="dg-paragraph"><\/p>\n<p class="dg-paragraph">real text<\/p><\/div>/,
+    'details boolean content item renders an empty paragraph; the real item stays');
+  assert.match(body, /<div class="dg-tab-panel"><p class="dg-paragraph"><\/p>\n<p class="dg-paragraph">real<\/p><\/div>/,
+    'tabs boolean content item renders an empty paragraph; the real item stays');
+  assert.match(body, /<button type="button" class="dg-btn dg-btn--primary">Button<\/button>/,
+    'a boolean button text falls back to the Button default');
+  assert.match(body, /<a href="#" class="dg-link">Link<\/a>/,
+    'a boolean link text falls back to the Link default');
+  assert.match(body, /class="dg-figure dg-chart"[^>]*aria-label="Chart"/,
+    'a boolean chart title falls back to the Chart default');
+  assert.match(body, /class="dg-figure dg-sparkline"[^>]*aria-label="Trend"/,
+    'a boolean sparkline title falls back to the Trend default');
+  assert.ok(!/>true<|>false</.test(body), 'no literal boolean text leaks anywhere in the body');
+});
+
 test('status state and collapsible/tab content treat non-finite values as absent', () => {
   // components.js renderStatus: item.state went straight into String() and
   // .toLowerCase() — a numeric NaN/Infinity became a literal "Infinity"/"nan"
