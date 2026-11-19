@@ -2167,6 +2167,63 @@ test('sparkline escapes title and caption, and flat series keeps a visible line'
   assert.match(html, /aria-label="Q1 &lt;2026&gt;"/, 'figure label prefers the caption');
 });
 
+test('sparkline drops nullish and blank entries instead of plotting fabricated zero readings', () => {
+  // A nullish or blank entry is an absent data point — the project treats
+  // null/'' as missing everywhere (table cells, list items, stat delta) — so
+  // it must drop like undefined does, never coerce Number(null) === 0 into a
+  // fake zero dip. Real zero readings still plot, and a [label, value] row
+  // whose value is nullish drops as a whole rather than resurrecting the
+  // numeric label as a reading.
+  const sparse = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: [3, null, 6] }] }],
+  });
+  assert.match(
+    sparse,
+    /<path class="dg-sparkline-line" d="M 0 ([\d.]+)L 100 ([\d.]+)"\/>/,
+    'a null entry drops so the remaining 3 and 6 draw a two-point edge-to-edge line, no zero dip at x=50'
+  );
+  const blank = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: [3, '', 6] }] }],
+  });
+  assert.match(
+    blank,
+    /<path class="dg-sparkline-line" d="M 0 ([\d.]+)L 100 ([\d.]+)"\/>/,
+    'an empty-string entry drops rather than coercing Number("") === 0'
+  );
+  const blankSpace = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: [3, '  ', 6] }] }],
+  });
+  assert.match(
+    blankSpace,
+    /<path class="dg-sparkline-line" d="M 0 ([\d.]+)L 100 ([\d.]+)"\/>/,
+    'a whitespace-only entry is blank and drops too'
+  );
+  const allNull = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: [null] }] }],
+  });
+  assert.match(allNull, /<p class="dg-note">No data to draw\.<\/p>/, 'all-null data shows the no-data note');
+  assert.ok(!allNull.includes('class="dg-sparkline-svg"'), 'all-null data renders no sparkline svg');
+  const nullishPair = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: [[2024, null], [2025, 2]] }] }],
+  });
+  assert.ok(!nullishPair.includes('class="dg-sparkline-line"'), 'a [label, null] row drops as a whole instead of plotting the numeric 2024 label as a reading');
+  assert.match(nullishPair, /<circle class="dg-sparkline-dot" cx="50" /, 'only the surviving [2025, 2] point remains, centered');
+  const realZero = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: [8, 0, 4] }] }],
+  });
+  assert.match(
+    realZero,
+    /<path class="dg-sparkline-line" d="M 0 ([\d.]+)L 50 ([\d.]+)L 100 ([\d.]+)"\/>/,
+    'a real zero reading still plots as a point, only nullish/blank entries are absent'
+  );
+});
+
 test('status renders a service-health list with the state spelled as text', () => {
   // Status is a static list of services and their last-known state; the state
   // is always visible text (never color-only, a11y check 6) with the dot a
