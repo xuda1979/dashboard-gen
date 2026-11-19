@@ -4056,6 +4056,56 @@ test('boolean/blank/non-finite title and caption slots degrade away, never fabri
     'a card title object form still renders its text');
 });
 
+test('boolean/blank/non-finite tab labels fall back to Tab N and whitespace image alt degrades away', () => {
+  // components.js renderTabs: a raw boolean/blank/non-finite tab label is
+  // truthy, so `(isObj(tab) ? tab.label : tab) || 'Tab N'` never reached the
+  // default and normalizeText fabricated an empty <label>, leaving a UI tab
+  // with no name. renderImage: a whitespace-only alt passed normalizeText's
+  // truthiness and spelled the blanks into alt="   " (captions had .trim(),
+  // alt didn't). A raw boolean/blank/non-finite tab label is absent like a
+  // missing one: the default `Tab N` name re-applies, and a whitespace alt
+  // degrades to a genuinely empty alt (the a11y check still requires the
+  // attribute). Typed labels and alts stay verbatim.
+  const fileDir = ExampleTmp();
+  fs.writeFileSync(
+    path.join(fileDir, 'pic.svg'),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="#0ea5e9"/></svg>'
+  );
+  const html = renderHtml(
+    {
+      title: 'tabs-alt-absent',
+      sections: [{
+        content: [
+          { type: 'tabs', tabs: [true, 'Two'] },
+          { type: 'tabs', tabs: [NaN, 3, { label: 'Real' }] },
+          { type: 'tabs', tabs: ['', { label: '   ', content: [{ type: 'paragraph', text: 'p' }] }] },
+          { type: 'image', file: 'pic.svg', alt: '   ' },
+          { type: 'image', file: 'pic.svg', alt: true },
+          { type: 'image', file: 'pic.svg', alt: 'Real alt' },
+        ],
+      }],
+    },
+    { fileDir }
+  );
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  assert.ok(!/<label class="dg-tab-label"><\/label>/.test(body),
+    'no empty tab label is fabricated from a truthy boolean/blank/non-finite label');
+  assert.match(body, /id="dg-tabs-\d+-0" class="dg-tab-input" checked>\n<label class="dg-tab-label" for="dg-tabs-\d+-0">Tab 1<\/label>/,
+    'a boolean tab label falls back to the Tab N default name');
+  assert.match(body, /id="dg-tabs-\d+-1" class="dg-tab-input">\n<label class="dg-tab-label" for="dg-tabs-\d+-1">3<\/label>/,
+    'a finite numeric tab label stays verbatim');
+  assert.match(body, /id="dg-tabs-\d+-2" class="dg-tab-input">\n<label class="dg-tab-label" for="dg-tabs-\d+-2">Real<\/label>/,
+    'a typed tab label stays verbatim');
+  assert.match(body, /id="dg-tabs-\d+-1" class="dg-tab-input">\n<label class="dg-tab-label" for="dg-tabs-\d+-1">Tab 2<\/label>\n<div class="dg-tab-panel"><p class="dg-paragraph">p<\/p><\/div>/,
+    'a blank tab label falls back to its Tab N default and the tab still renders its panel');
+  assert.ok(!body.includes('alt="   "'), 'a whitespace-only image alt degrades instead of spelling the blanks');
+  assert.ok(!body.includes('alt="true"'), 'a boolean image alt degrades to an empty alt');
+  assert.match(body, /<img src="data:image\/svg\+xml;utf8,[^"]+" alt="">/,
+    'the whitespace/boolean alt images still carry the required empty alt attribute');
+  assert.match(body, /<img src="data:image\/svg\+xml;utf8,[^"]+" alt="Real alt">/,
+    'a typed image alt stays verbatim');
+});
+
 test('stat falls back to title label and to a bare stat aria-label', () => {
   // components.js renderStat: the figure label is `c.label || c.title || ''`.
   // A stat given only a `title:` uses it as the label, and one with neither
