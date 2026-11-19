@@ -3484,6 +3484,11 @@ test('stat and stat-list treat non-finite numeric values as absent, not literal 
         { type: 'stat', label: 'Real', value: '~1.2k' },
         { type: 'stat', label: 'Num', value: 42 },
         { type: 'stat', label: 'Zero', value: 0 },
+        { type: 'stat', label: 'DeltaScalarInf', value: '1', delta: Infinity },
+        { type: 'stat', label: 'DeltaInf', value: '1', delta: { value: Infinity } },
+        { type: 'stat', label: 'DeltaNeath', value: '1', delta: { value: -Infinity } },
+        { type: 'stat', label: 'DeltaNan', value: '1', delta: { value: NaN } },
+        { type: 'stat', label: 'DeltaReal', value: '1', delta: { value: 3, tone: 'good' } },
         {
           type: 'stat-list',
           items: [
@@ -3491,6 +3496,9 @@ test('stat and stat-list treat non-finite numeric values as absent, not literal 
             { label: 'B', value: NaN },
             { label: 'C', value: 'Infinity' },
             { label: 'D', value: '7' },
+            { label: 'E', value: '2', delta: { value: Infinity } },
+            { label: 'F', value: '3', delta: { value: NaN } },
+            { label: 'G', value: '4', delta: { value: 2 } },
           ],
         },
       ],
@@ -3504,13 +3512,27 @@ test('stat and stat-list treat non-finite numeric values as absent, not literal 
   assert.match(body, /dg-stat" role="img" aria-label="Real: ~1.2k"/, 'display strings stay verbatim');
   assert.match(body, /dg-stat" role="img" aria-label="Num: 42"/, 'real numeric values still render');
   assert.match(body, /dg-stat" role="img" aria-label="Zero: 0"/, 'a real zero still renders');
+  assert.match(body, /dg-stat" role="img" aria-label="DeltaScalarInf: 1"/, 'scalar non-finite delta drops without a trend chip');
+  assert.match(body, /dg-stat" role="img" aria-label="DeltaInf: 1"/, 'object non-finite delta drops without a fabricated "▲ Infinity" chip');
+  assert.match(body, /dg-stat" role="img" aria-label="DeltaNeath: 1"/, 'object -Infinity delta drops without a fabricated "▼ Infinity" chip');
+  assert.match(body, /dg-stat" role="img" aria-label="DeltaNan: 1"/, 'object NaN delta drops without a fabricated "NaN" chip');
+  assert.match(body, /dg-stat" role="img" aria-label="DeltaReal: 1, ▲ 3"/, 'a finite object delta still joins the accessible name');
+  const deltaChips = body.match(/class="dg-stat-delta/g) || [];
+  assert.strictEqual(deltaChips.length, 1, 'only the finite object delta renders a stat chip');
+  assert.match(body, /class="dg-stat-delta dg-stat-delta--good">▲ 3</);
   const listValues = body.match(/class="dg-statlist-value">([^<]*)/g) || [];
   assert.deepEqual(listValues, [
     'class="dg-statlist-value">',
     'class="dg-statlist-value">',
     'class="dg-statlist-value">Infinity',
     'class="dg-statlist-value">7',
+    'class="dg-statlist-value">2',
+    'class="dg-statlist-value">3',
+    'class="dg-statlist-value">4',
   ], 'non-finite stat-list row values degrade away; typed strings stay');
+  const listDeltas = body.match(/class="dg-statlist-delta/g) || [];
+  assert.strictEqual(listDeltas.length, 1, 'only the finite list delta renders a stat-list cell');
+  assert.match(body, /class="dg-statlist-delta dg-statlist-delta--neutral"[^>]*>▲ 2</);
 });
 
 test('stat falls back to title label and to a bare stat aria-label', () => {
