@@ -3906,6 +3906,64 @@ test('boolean and non-finite href/id values degrade away, never fabricate attrib
     'no literal boolean/non-finite text leaks into any href or id attribute');
 });
 
+test('boolean/blank/non-finite label slots fall back to the default landmark name or degrade away', () => {
+  // components.js renderToc/renderQuote/renderFootnote: a raw boolean `label`
+  // or `cite` is truthy, so the pre-coercion `c.label ?` / `c.cite ?` checks
+  // fabricated an empty aria-label / empty "— " footer from never-provided
+  // values. A raw boolean, blank, or non-finite value in a label slot is
+  // absent like a nullish one: toc/footnote fall back to their default names
+  // ("Contents"/"Footnote") and the quote drops its footer. Typed strings
+  // still override the default name and stay verbatim.
+  const html = renderHtml({
+    title: 'label-fallback',
+    sections: [{
+      title: 'Sect',
+      content: [
+        { type: 'toc' },
+        { type: 'toc', label: true },
+        { type: 'toc', label: 'Jump to' },
+        { type: 'quote', text: 'plain' },
+        { type: 'quote', text: 'trueCite', cite: true },
+        { type: 'quote', text: 'infCite', cite: Infinity },
+        { type: 'quote', text: 'realCite', cite: 'Ada L.' },
+        { type: 'footnote', text: 'boolNote', label: true },
+        { type: 'footnote', text: 'blankNote', label: '   ' },
+        { type: 'footnote', text: 'nonfiniteNote', label: NaN },
+        { type: 'footnote', text: 'realNote', label: 'Real note' },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  assert.ok(!/aria-label=""/.test(body),
+    'no empty aria-label is fabricated from a truthy boolean/blank/non-finite label');
+  const tocCount = (body.match(/<nav class="dg-toc"/g) || []).length;
+  assert.equal(tocCount, 3, 'three toc blocks render (one per content entry)');
+  assert.match(body, /<nav class="dg-toc" aria-label="Contents">/,
+    'a missing toc label falls back to the Contents default name');
+  assert.match(body, /<nav class="dg-toc" aria-label="Contents">/,
+    'a boolean toc label falls back to the Contents default name');
+  assert.match(body, /<nav class="dg-toc" aria-label="Jump to">/,
+    'a typed toc label overrides the default name and stays verbatim');
+  assert.ok(!/<footer class="dg-quote-cite">— <\/footer>/.test(body),
+    'no empty quote-cite footer is rendered from a truthy boolean/non-finite cite');
+  assert.match(body, /<blockquote class="dg-quote"><p>trueCite<\/p><\/blockquote>/,
+    'a boolean quote cite degrades away entirely');
+  assert.match(body, /<blockquote class="dg-quote"><p>infCite<\/p><\/blockquote>/,
+    'a non-finite quote cite degrades away entirely');
+  assert.match(body, /<footer class="dg-quote-cite">— Ada L\.<\/footer>/,
+    'a typed quote cite stays verbatim');
+  assert.match(body, /<aside class="dg-footnote" role="doc-footnote" aria-label="Footnote">boolNote<\/aside>/,
+    'a boolean footnote label falls back to the Footnote default name');
+  assert.match(body, /<aside class="dg-footnote" role="doc-footnote" aria-label="Footnote">blankNote<\/aside>/,
+    'a blank footnote label falls back to the Footnote default name');
+  assert.match(body, /<aside class="dg-footnote" role="doc-footnote" aria-label="Footnote">nonfiniteNote<\/aside>/,
+    'a non-finite footnote label falls back to the Footnote default name');
+  assert.match(body, /<aside class="dg-footnote" role="doc-footnote" aria-label="Real note">realNote<\/aside>/,
+    'a typed footnote label stays verbatim');
+  assert.ok(!/aria-label="(?:true|false|NaN|Infinity|[-+]?Infinity)"/.test(body),
+    'no literal boolean/non-finite text leaks into any aria-label');
+});
+
 test('stat falls back to title label and to a bare stat aria-label', () => {
   // components.js renderStat: the figure label is `c.label || c.title || ''`.
   // A stat given only a `title:` uses it as the label, and one with neither
