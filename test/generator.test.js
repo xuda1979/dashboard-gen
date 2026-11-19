@@ -1211,6 +1211,38 @@ test('chart start option is emitted as a data-chart-start attribute', () => {
   assert.ok(!/data-chart-start="/.test(without), 'no data-chart-start without start:');
 });
 
+test('chart start option treats nullish or blank values as absent, not a zero baseline', () => {
+  // components.js renderChart: a whitespace start is truthy, so it used to
+  // ship as data-chart-start="   ", where the runtime's Number('   ') === 0
+  // fabricated a y-axis baseline of zero. Blank start is absent like a missing
+  // one; a real zero and numeric strings still ship as attributes.
+  const cases = [
+    ['', false],
+    ['   ', false],
+    [null, false],
+    [undefined, false],
+    [0, true],
+    ['0', true],
+    [10, true],
+    ['2024-01-01', true],
+  ];
+  for (const [start, expected] of cases) {
+    const html = renderHtml({
+      title: 't',
+      sections: [{
+        content: [{ type: 'chart', kind: 'line', title: 'Price', ...(start === undefined ? {} : { start }), data: [['x', 1]] }],
+      }],
+    });
+    const attr = html.match(/data-chart-start="([^"]*)"/);
+    if (expected) {
+      assert.ok(attr, `start ${JSON.stringify(start)} still emits the attribute`);
+      assert.strictEqual(attr[1], String(start), `start ${JSON.stringify(start)} keeps its value`);
+    } else {
+      assert.ok(!attr, `blank/null start ${JSON.stringify(start)} emits no attribute`);
+    }
+  }
+});
+
 test('unknown chart kind falls back to line with a Chart label', () => {
   // renderChart treats only line/bar/pie as valid; anything else (typo, future
   // kind) must degrade to the line shell so the figure still renders.

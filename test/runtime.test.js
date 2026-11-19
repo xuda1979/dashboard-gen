@@ -372,6 +372,32 @@ test('runtime honors numeric start as the line chart baseline', () => {
   assert.ok(Math.max(...anchored) > Math.max(...base), 'lower baseline shifts the polyline down');
 });
 
+test('runtime treats a blank data-chart-start attribute as absent, not a zero baseline', () => {
+  // render.js renderOne: `Number('   ') === 0` used to turn a whitespace
+  // data-chart-start into a zero y-baseline, flattening the series onto the
+  // axis. A blank start is absent like a missing one, so the polyline must
+  // match the no-start baseline exactly.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Temp\n        data:\n          - { label: Jan, series: { t: 20 } }\n          - { label: Feb, series: { t: 24 } }\n          - { label: Mar, series: { t: 28 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const data = { 'chart-0': [{ label: 'Jan', series: { t: 20 } }, { label: 'Feb', series: { t: 24 } }, { label: 'Mar', series: { t: 28 } }] };
+
+  function ysFor(fig) {
+    const { dom, figureEls } = makeDom([fig]);
+    runRuntime(code, dom, data);
+    const d = /<path class="dg-series" d="([^"]+)"/.exec(figureEls[0].innerHTML);
+    assert.ok(d, 'line chart produced a series path');
+    const nums = d[1].match(/-?\d+(\.\d+)?/g).map(Number);
+    return nums.filter((_, i) => i % 2 === 1);
+  }
+
+  const base = ysFor({ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Temp' });
+  const blank = ysFor({ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Temp', 'data-chart-start': '   ' });
+  assert.deepStrictEqual(blank, base, 'whitespace start leaves the y-axis baseline untouched');
+});
+
 test('runtime keeps a line y-axis right-way-up when start sits above the data', () => {
   // A numeric start above the padded data max used to pin minV >= maxV, so
   // y() divided by a negative span and inverted the axis: higher data mapped
