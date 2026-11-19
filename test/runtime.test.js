@@ -1283,11 +1283,13 @@ test('runtime defers chart init until DOMContentLoaded when the document is load
 
 test('runtime shows the no-data note when a line has no usable values', () => {
   // A series whose rows are all non-numeric (Number() coerces each to NaN) or
-  // missing renders with no plottable point. (Note null would NOT reach this
-  // path: toPoints runs every value through Number(), and Number(null) is 0, a
-  // legitimate plotted point.) The chart must degrade to the same no-data note
-  // the empty-data path and the pie kind produce — not a hollow svg shell with
-  // grid lines and an empty d="" path.
+  // missing renders with no plottable point. (Nullish and blank cells are
+  // coerced to NaN before the drawing loops — Number(null) and Number('') are
+  // 0, but the absent-vs-zero convention treats them as no reading, so they
+  // join the non-numeric rows here instead of plotting a fabricated zero.)
+  // The chart must degrade to the same no-data note the empty-data path and
+  // the pie kind produce — not a hollow svg shell with grid lines and an empty
+  // d="" path.
   const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'chart.yaml'), 'utf8');
   const html = buildFromSource(src, 'chart.yaml', { fileDir: 'examples' });
   const code = extractRuntime(html);
@@ -1357,6 +1359,105 @@ test('runtime drops a line series that has no usable values without a hollow pat
   assert.ok(out.includes('>a</span>') && out.includes('>b</span>'), 'legend still names both series');
 });
 
+test('runtime skips nullish and blank chart cells as no reading, not zero', () => {
+  // toPoints coerces every series cell toward a number for the drawing loops,
+  // and Number(null) === Number('') === Number(' ') === 0. The absent-vs-zero
+  // convention (already pinned for stat/progress/gauge/sparkline) treats those
+  // cells as missing: nullish and blank cells must be dropped from the path and
+  // bar set like NaN cells are, and a series with no usable cells must hit the
+  // no-data note — not plot a fabricated zero dip or a zero-height bar.
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'chart.yaml'), 'utf8');
+  const html = buildFromSource(src, 'chart.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+
+  const lineCommands = (out) => {
+    const m = out.match(/<path class="dg-series" d="([^"]*)"/);
+    if (!m) return 0;
+    const commands = m[1].match(/[ML]/g) || [];
+    return commands.length;
+  };
+
+  // array-of-arrays with a header row: the null/blank rows are no reading
+  let { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Header' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      ['Day', 'v'],
+      ['Mon', 10], ['Tue', null], ['Wed', 20], ['Thu', ''], ['Fri', ' '],
+    ],
+  });
+  assert.strictEqual(lineCommands(figureEls[0].innerHTML), 2, 'header array: only the 10/20 cells join the path');
+
+  // headerless array-of-arrays
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Headerless' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [['Mon', 10], ['Tue', null], ['Wed', 20]],
+  });
+  assert.strictEqual(lineCommands(figureEls[0].innerHTML), 2, 'headerless array: the null row is not a zero point');
+
+  // flat object rows
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Flat' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [{ label: 'Mon', v: 10 }, { label: 'Tue', v: null }, { label: 'Wed', v: 20 }],
+  });
+  assert.strictEqual(lineCommands(figureEls[0].innerHTML), 2, 'flat object rows: the null cell is skipped');
+
+  // nested { series: {...} } object rows: the blank cell is skipped
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Nested' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Mon', series: { v: 10 } },
+      { label: 'Tue', series: { v: '' } },
+      { label: 'Wed', series: { v: 20 } },
+    ],
+  });
+  assert.strictEqual(lineCommands(figureEls[0].innerHTML), 2, 'nested series rows: the blank cell is skipped');
+
+  // a real zero is still a reading
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Zero' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [{ label: 'a', series: { v: 0 } }, { label: 'b', series: { v: 10 } }],
+  });
+  assert.strictEqual(lineCommands(figureEls[0].innerHTML), 2, 'a real zero still plots');
+
+  // bar analogue: the null row renders no rect at all (no zero-height bar)
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'Spare' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: 5 } },
+      { label: 'Q2', series: { a: null } },
+      { label: 'Q3', series: { a: 15 } },
+    ],
+  });
+  const out = figureEls[0].innerHTML;
+  const bars = out.match(/<rect class="dg-bar"/g) || [];
+  assert.strictEqual(bars.length, 2, 'bar chart: the null row renders no rect');
+  assert.ok(!/height="0/.test(out), 'no zero-height placeholder bar for the null cell');
+
+  // a series with only nullish/blank cells degrades to the no-data note
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Spare' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Mon', series: { v: null } },
+      { label: 'Tue', series: { v: '' } },
+    ],
+  });
+  assert.ok(figureEls[0].innerHTML.includes('class="dg-note"'), 'all-nullish line degrades to the no-data note');
+  assert.ok(!figureEls[0].innerHTML.includes('<svg'), 'no hollow svg shell');
+});
 test('runtime drops an unusable bar series but keeps its legend entry', () => {
   // The bar analogue of the line guard: a second series whose cells are all
   // non-numeric must render no rect at all — not a NaN-height bar, not a
