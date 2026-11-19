@@ -1672,6 +1672,103 @@ test('runtime skips nullish and blank chart cells as no reading, not zero', () =
   const infBarAllOut = figureEls[0].innerHTML;
   assert.ok(infBarAllOut.includes('class="dg-note"'), 'an all-non-finite bar series hits the no-data note');
   assert.ok(!infBarAllOut.includes('<svg'), 'no hollow svg for an all-non-finite bar series');
+
+  // a literal NaN cell is absent, not a reading — bare isNaN guards already
+  // drop it, so the path must keep only the finite neighbours (no NaN residue)
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'NanFlat' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'a', series: { v: 10 } },
+      { label: 'b', series: { v: NaN } },
+      { label: 'c', series: { v: 20 } },
+    ],
+  });
+  const nanFlatOut = figureEls[0].innerHTML;
+  assert.strictEqual(lineCommands(nanFlatOut), 2, 'flat object rows: the NaN cell is dropped from the path');
+  assert.ok(!nanFlatOut.includes('NaN'), 'a NaN cell cannot leak into the line output');
+
+  // bar analogue: a NaN cell renders no rect and no NaN height
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'NanBar' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: 5 } },
+      { label: 'Q2', series: { a: NaN } },
+      { label: 'Q3', series: { a: 15 } },
+    ],
+  });
+  const nanBarOut = figureEls[0].innerHTML;
+  assert.strictEqual((nanBarOut.match(/<rect class="dg-bar"/g) || []).length, 2, 'bar chart: the NaN cell renders no rect');
+  assert.ok(!/<rect class="dg-bar"[^>]*NaN/.test(nanBarOut), 'no NaN leaks into any rect');
+
+  // pie oneMap: a NaN slice value is dropped and shares recompute over the total
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'NanPie' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Traffic', series: { Organic: 40, Direct: NaN, Referral: 35 } },
+    ],
+  });
+  const nanPieOut = figureEls[0].innerHTML;
+  assert.strictEqual((nanPieOut.match(/class="dg-slice"/g) || []).length, 2, 'pie chart: the NaN slice renders no wedge');
+  assert.ok(!nanPieOut.includes('>Direct</span>'), 'the NaN slice is absent from the legend');
+  assert.ok(nanPieOut.includes('Organic 53.3%'), 'shares recompute over the surviving positive total');
+  assert.ok(!nanPieOut.includes('NaN'), 'no NaN leaks into the pie output');
+
+  // pie row form: NaN in a ['label', value] row drops the same way
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'NanPieRow' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [['Organic', 40], ['Direct', NaN], ['Referral', 35]],
+  });
+  const nanPieRowOut = figureEls[0].innerHTML;
+  assert.strictEqual((nanPieRowOut.match(/class="dg-slice"/g) || []).length, 2, 'row-form pie: the NaN row drops');
+  assert.ok(nanPieRowOut.includes('Organic 53.3%'), 'row-form shares recompute over the surviving total');
+
+  // numeric-string cells are real readings: Number('10') === 10, so the string
+  // form must plot exactly like the number form — not drop to the no-data note
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'StrFlat' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'a', series: { v: '10' } },
+      { label: 'b', series: { v: '20' } },
+    ],
+  });
+  const strFlatOut = figureEls[0].innerHTML;
+  assert.strictEqual(lineCommands(strFlatOut), 2, 'numeric-string line cells still plot');
+  assert.ok(!strFlatOut.includes('NaN'), 'no NaN residue from coerced numeric strings');
+
+  // bar analogue: numeric-string cells render their rects
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'StrBar' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: '5' } },
+      { label: 'Q2', series: { a: '15' } },
+    ],
+  });
+  const strBarOut = figureEls[0].innerHTML;
+  assert.strictEqual((strBarOut.match(/<rect class="dg-bar"/g) || []).length, 2, 'numeric-string bar cells still render rects');
+  assert.ok(!/[^0-9]NaN/.test(strBarOut), 'no NaN leaks from coerced numeric-string bars');
+
+  // pie row form: numeric-string slice values count toward shares like numbers
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'StrPieRow' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [['Organic', '40'], ['Referral', '35']],
+  });
+  const strPieRowOut = figureEls[0].innerHTML;
+  assert.strictEqual((strPieRowOut.match(/class="dg-slice"/g) || []).length, 2, 'numeric-string pie rows still render wedges');
+  assert.ok(strPieRowOut.includes('Organic 53.3%'), 'numeric-string shares compute over the coerced total');
 });
 test('runtime drops an unusable bar series but keeps its legend entry', () => {
   // The bar analogue of the line guard: a second series whose cells are all
