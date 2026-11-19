@@ -5968,6 +5968,63 @@ test('grid blank or null columnWidth falls back to the 220px default', () => {
     'no malformed minmax minimum leaks into the layout');
 });
 
+test('grid blank or non-positive columns falls back to the fluid auto-fill layout', () => {
+  // components.js renderGrid: `c.columns ?` treated a whitespace string as a
+  // real column count (it is truthy), so columns: '   ' entered the fixed-N
+  // branch where Number('   ') === 0 and `|| 3` fabricated a
+  // "repeat(3, minmax(0, 1fr))" grid from a blank — and fractional counts
+  // like 2.5 emitted the invalid CSS "repeat(2.5, ...)". A blank, non-positive,
+  // non-integer, or garbage count is absent like a missing one: only a real
+  // positive integer count selects the fixed grid, everything else degrades to
+  // the fluid auto-fill layout and the data-grid-cols hook stays a sane 3.
+  const grid = (columns) => ({
+    type: 'grid',
+    ...(columns === undefined ? {} : { columns }),
+    items: [],
+  });
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [
+      grid(undefined),
+      grid(null),
+      grid(''),
+      grid('   '),
+      grid(0),
+      grid('0'),
+      grid(-2),
+      grid(2.5),
+      grid('2.5'),
+      grid('abc'),
+      grid(false),
+      grid(3),
+      grid(4),
+    ] }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  const styles = body.match(/grid-template-columns: (repeat\([^;]+)\);/g) || [];
+  assert.deepEqual(styles, [
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(3, minmax(0, 1fr));',
+    'grid-template-columns: repeat(4, minmax(0, 1fr));',
+  ], 'blank, null, non-positive, fractional, and garbage counts degrade to the fluid auto-fill layout');
+  assert.ok(!/repeat\(2\.5|repeat\(-|repeat\(0,|repeat\(NaN/.test(body),
+    'no invalid or malformed repeat count leaks into the layout');
+  const colsAttrs = body.match(/data-grid-cols="[^"]+"/g) || [];
+  assert.strictEqual(colsAttrs.length, 13, 'every grid still carries the data-grid-cols hook');
+  assert.ok(!['0', '-2', '2.5', 'NaN'].some((bad) => body.includes(`data-grid-cols="${bad}"`)),
+    'no malformed column count leaks into the data-grid-cols attribute');
+});
+
 test('quote component renders text with optional cite footer', () => {
   const html = renderHtml({
     title: 't',
