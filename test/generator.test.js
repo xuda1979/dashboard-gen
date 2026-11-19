@@ -5968,6 +5968,52 @@ test('grid blank or null columnWidth falls back to the 220px default', () => {
     'no malformed minmax minimum leaks into the layout');
 });
 
+test('grid non-numeric scalar columnWidth falls back to the 220px default', () => {
+  // components.js renderGrid: Number(true) === 1 and Number(false) === 0 are
+  // finite, so booleans used to pass the isFinite guard and fabricate the
+  // invalid "minmax(truepx, 1fr)" / "minmax(falsepx, 1fr)" minimum — and a
+  // bare word like "abc", being truthy, fell to the raw-string branch and
+  // leaked the unit-less "minmax(abc, 1fr)". Only a real non-negative length
+  // (number, numeric string, or unit-suffixed string) can size an auto-fill
+  // track; non-numeric or negative scalars are absent like a missing width.
+  const grid = (columnWidth) => ({
+    type: 'grid',
+    ...(columnWidth === undefined ? {} : { columnWidth }),
+    items: [],
+  });
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [
+      grid(true),
+      grid(false),
+      grid('abc'),
+      grid(-40),
+      grid('-40'),
+      grid(220),
+      grid('220'),
+      grid('18rem'),
+      grid('50%'),
+      grid(undefined),
+    ] }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  const mins = body.match(/minmax\(([^)]*), 1fr\)/g) || [];
+  assert.deepEqual(mins, [
+    'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
+    'minmax(18rem, 1fr)',
+    'minmax(50%, 1fr)',
+    'minmax(220px, 1fr)',
+  ], 'booleans, bare words, and negative widths degrade to 220px while numeric and unit-suffixed lengths survive');
+  assert.ok(!/minmax\((true|false)px|minmax\([a-z]+, 1fr\)|minmax\(-\d+px, 1fr\)/.test(body),
+    'no boolean, unit-less, or negative minmax minimum leaks into the layout');
+});
+
 test('grid blank or non-positive columns falls back to the fluid auto-fill layout', () => {
   // components.js renderGrid: `c.columns ?` treated a whitespace string as a
   // real column count (it is truthy), so columns: '   ' entered the fixed-N
