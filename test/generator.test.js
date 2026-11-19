@@ -3837,6 +3837,75 @@ test('status state and collapsible/tab content treat non-finite values as absent
     'tabs content non-finite item renders an empty paragraph and the real item stays');
 });
 
+test('boolean and non-finite href/id values degrade away, never fabricate attributes', () => {
+  // components.js normalizeAttr: `if (c.href)` / `c.href || '#'` treat a truthy
+  // boolean (true) and non-finite numbers (NaN/Infinity are truthy) as real
+  // links, and attr() = esc() spelled them literally — `href="true"`,
+  // `href="Infinity"`, `id="true"`. A raw boolean or non-finite number in an
+  // id/href slot is absent like a nullish one: the anchor falls back to '#',
+  // the button degrades to a plain <button>, the headline drops the id, the
+  // paragraph link-form renders without the inline link, and the breadcrumb
+  // item renders as plain text. Typed strings and real URLs stay verbatim.
+  const html = renderHtml({
+    title: 'attr-absent',
+    sections: [{
+      content: [
+        { type: 'headline', text: 'H', id: true },
+        { type: 'headline', text: 'H2', id: Infinity },
+        { type: 'headline', text: 'H3', id: 'real-id' },
+        { type: 'link', text: 'L', href: true },
+        { type: 'link', text: 'L2', href: Infinity },
+        { type: 'link', text: 'L3', href: false },
+        { type: 'link', text: 'L4', href: 'https://x.example' },
+        { type: 'button', text: 'B', href: NaN },
+        { type: 'button', text: 'B2', href: 'https://b.example' },
+        { type: 'paragraph', text: 'c', href: true },
+        { type: 'paragraph', text: 'c2', href: Infinity },
+        { type: 'paragraph', text: 'c3', href: 'https://p.example' },
+        { type: 'breadcrumbs', items: [
+          { label: 'A', href: true },
+          { label: 'Docs', href: '#x' },
+          { label: 'Inf', href: -Infinity },
+          'Plain',
+        ] },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  assert.match(body, /<h2 class="dg-headline dg-h2">H<\/h2>/,
+    'a boolean headline id drops the id attribute instead of fabricating id="true"');
+  assert.match(body, /<h2 class="dg-headline dg-h2">H2<\/h2>/,
+    'a non-finite headline id drops the id attribute instead of fabricating id="Infinity"');
+  assert.match(body, /<h2 id="real-id" class="dg-headline dg-h2">H3<\/h2>/,
+    'a typed id still renders verbatim');
+  assert.match(body, /<a href="#" class="dg-link">L<\/a>/,
+    'a boolean link href falls back to the # placeholder');
+  assert.match(body, /<a href="#" class="dg-link">L2<\/a>/,
+    'a non-finite link href falls back to the # placeholder');
+  assert.match(body, /<a href="#" class="dg-link">L3<\/a>/,
+    'a false link href still falls back to the # placeholder');
+  assert.match(body, /<a href="https:\/\/x.example" class="dg-link">L4<\/a>/,
+    'a real link href stays verbatim');
+  assert.match(body, /<button type="button" class="dg-btn dg-btn--primary">B<\/button>/,
+    'a non-finite button href degrades to the plain button form');
+  assert.match(body, /<a href="https:\/\/b.example" class="dg-btn dg-btn--primary">B2<\/a>/,
+    'a real button href stays an anchor');
+  assert.match(body, /<p class="dg-paragraph">c<\/p>/,
+    'a boolean paragraph link-form href renders a plain paragraph, no dead link');
+  assert.match(body, /<p class="dg-paragraph">c2<\/p>/,
+    'a non-finite paragraph link-form href renders a plain paragraph, no dead link');
+  assert.match(body, /<p class="dg-paragraph">c3 <a href="https:\/\/p.example" class="dg-link">https:\/\/p.example<\/a><\/p>/,
+    'a real paragraph link-form href keeps the inline link');
+  assert.ok(!body.includes('<li class="dg-breadcrumbs-item"><a class="dg-breadcrumbs-link" href="true">'),
+    'a boolean breadcrumb href does not fabricate a link');
+  assert.match(body, /<li class="dg-breadcrumbs-item"><span class="dg-breadcrumbs-text">Inf<\/span><\/li>/,
+    'a non-finite breadcrumb href degrades to a plain text item');
+  assert.match(body, /<li class="dg-breadcrumbs-item"><a class="dg-breadcrumbs-link" href="#x">Docs<\/a><\/li>/,
+    'a real breadcrumb href stays a link');
+  assert.ok(!/(?:href|id)="(?:true|false|[-+]?Infinity|NaN)"/.test(body),
+    'no literal boolean/non-finite text leaks into any href or id attribute');
+});
+
 test('stat falls back to title label and to a bare stat aria-label', () => {
   // components.js renderStat: the figure label is `c.label || c.title || ''`.
   // A stat given only a `title:` uses it as the label, and one with neither
