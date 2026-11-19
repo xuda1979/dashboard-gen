@@ -1572,6 +1572,106 @@ test('runtime skips nullish and blank chart cells as no reading, not zero', () =
   assert.ok(figureEls[0].innerHTML.includes('No data to draw'), 'all-boolean pie shows the no-data note');
   assert.ok(!figureEls[0].innerHTML.includes('<svg'), 'no hollow svg for an all-boolean pie');
   assert.ok(!figureEls[0].innerHTML.includes('NaN'), 'no NaN leaks into the all-boolean pie');
+
+  // flat object rows: a non-finite cell is absent, not a reading — Infinity is
+  // finite-shaped to isNaN (isNaN(Infinity) === false), so it used to join the
+  // path and push maxV to Infinity, poisoning every y() coordinate to NaN
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'InfFlat' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'a', series: { v: Infinity } },
+      { label: 'b', series: { v: 10 } },
+      { label: 'c', series: { v: 20 } },
+    ],
+  });
+  const infFlatOut = figureEls[0].innerHTML;
+  assert.strictEqual(lineCommands(infFlatOut), 2, 'flat object rows: the Infinity cell is dropped from the path');
+  assert.ok(!infFlatOut.includes('NaN'), 'the infinite cell cannot poison the y-axis into NaN');
+  assert.ok(!infFlatOut.includes('Infinity'), 'no infinity leaks into the line output');
+
+  // -Infinity behaves the same
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'NegInfFlat' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'a', series: { v: -Infinity } },
+      { label: 'b', series: { v: 10 } },
+    ],
+  });
+  const negInfOut = figureEls[0].innerHTML;
+  assert.strictEqual(lineCommands(negInfOut), 1, 'the -Infinity cell is dropped like the +Infinity one');
+  assert.ok(!negInfOut.includes('NaN') && !negInfOut.includes('Infinity'), 'no non-finite residue in the -Infinity line');
+
+  // bar analogue: an Infinity cell renders no rect (no fabricated bar, no NaN height)
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'InfBar' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: 5 } },
+      { label: 'Q2', series: { a: Infinity } },
+      { label: 'Q3', series: { a: 15 } },
+    ],
+  });
+  const infBarOut = figureEls[0].innerHTML;
+  assert.strictEqual((infBarOut.match(/<rect class="dg-bar"/g) || []).length, 2, 'bar chart: the Infinity cell renders no rect');
+  assert.ok(!infBarOut.includes('NaN') && !infBarOut.includes('Infinity'), 'no non-finite residue in the bar output');
+
+  // pie oneMap: an Infinity slice value is dropped, not a fabricated wedge that
+  // turns the total infinite and every share into a 0.0% label
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'InfPie' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Traffic', series: { Organic: 40, Direct: Infinity, Referral: 35 } },
+    ],
+  });
+  const infPieOut = figureEls[0].innerHTML;
+  assert.strictEqual((infPieOut.match(/class="dg-slice"/g) || []).length, 2, 'pie chart: the Infinity slice renders no wedge');
+  assert.ok(!infPieOut.includes('>Direct</span>'), 'the Infinity slice is absent from the legend');
+  assert.ok(infPieOut.includes('Organic 53.3%'), 'shares recompute over the surviving finite total');
+  assert.ok(!infPieOut.includes('Infinity') && !infPieOut.includes('NaN'), 'no non-finite residue in the pie output');
+
+  // pie row form: Infinity in a ['label', value] row drops the same way
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'InfPieRow' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [['Organic', 40], ['Direct', Infinity], ['Referral', 35]],
+  });
+  const infPieRowOut = figureEls[0].innerHTML;
+  assert.strictEqual((infPieRowOut.match(/class="dg-slice"/g) || []).length, 2, 'row-form pie: the Infinity row drops');
+  assert.ok(infPieRowOut.includes('Organic 53.3%'), 'row-form shares recompute over the surviving total');
+
+  // a non-finite start attribute is absent like a blank one
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'InfStart',
+      'data-chart-start': 'Infinity' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [{ label: 'a', series: { v: 10 } }, { label: 'b', series: { v: 20 } }],
+  });
+  const infStartOut = figureEls[0].innerHTML;
+  assert.strictEqual(lineCommands(infStartOut), 2, 'a non-finite start does not pin the y-axis to Infinity');
+  assert.ok(!infStartOut.includes('NaN'), 'an "Infinity" start cannot poison the y-domain');
+
+  // series whose cells are all non-finite degrade to the no-data note
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'InfBarAll' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: Infinity } },
+      { label: 'Q2', series: { a: -Infinity } },
+    ],
+  });
+  const infBarAllOut = figureEls[0].innerHTML;
+  assert.ok(infBarAllOut.includes('class="dg-note"'), 'an all-non-finite bar series hits the no-data note');
+  assert.ok(!infBarAllOut.includes('<svg'), 'no hollow svg for an all-non-finite bar series');
 });
 test('runtime drops an unusable bar series but keeps its legend entry', () => {
   // The bar analogue of the line guard: a second series whose cells are all
