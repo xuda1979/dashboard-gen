@@ -1317,3 +1317,29 @@ test('runtime drops a line series that has no usable values without a hollow pat
   assert.ok(!/d=""/.test(out), 'no empty d attribute on any path');
   assert.ok(out.includes('>a</span>') && out.includes('>b</span>'), 'legend still names both series');
 });
+
+test('runtime drops an unusable bar series but keeps its legend entry', () => {
+  // The bar analogue of the line guard: a second series whose cells are all
+  // non-numeric must render no rect at all — not a NaN-height bar, not a
+  // zero-height placeholder — while the valid series still plots and the
+  // legend keeps both names (the series key exists, the cells are bad).
+  const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'chart.yaml'), 'utf8');
+  const html = buildFromSource(src, 'chart.yaml', { fileDir: 'examples' });
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'Mixed' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: 10, b: 'oops' } },
+      { label: 'Q2', series: { a: 14 } },
+      { label: 'Q3', series: { a: 9, b: 'nope' } },
+    ],
+  });
+  const out = figureEls[0].innerHTML;
+  const bars = out.match(/<rect class="dg-bar"/g) || [];
+  assert.strictEqual(bars.length, 3, 'only the valid series draws bars (one per row)');
+  assert.ok(!/<rect class="dg-bar"[^>]*NaN/.test(out), 'no NaN leaks into any rect');
+  assert.ok(!/height="0/.test(out), 'no zero-height placeholder bar for the unusable series');
+  assert.ok(out.includes('>a</span>') && out.includes('>b</span>'), 'legend still names both series');
+});
