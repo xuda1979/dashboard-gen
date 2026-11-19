@@ -3522,6 +3522,66 @@ test('stat progressLabel falls back to N% when boolean/blank/(non-finite) instea
   assert.match(html, /aria-label="Nearly full"/, 'typed progressLabel stays verbatim');
 });
 
+test('whitespace-only text slots degrade to absent or the documented default, not stale blank wrappers', () => {
+  // The raw-truthiness guards in renderButton/renderLink/renderCard/renderStat/
+  // renderChart/renderSparkline/renderCode/renderGauge/renderDetails let a
+  // whitespace-only string through, fabricating stale `   ` wrapper text,
+  // aria-label="   ", data-chart-title="   " and role="region" aria-label="   "
+  // regions. Whitespace is absent like blank: the slot must trim and degrade
+  // to absent (or the documented "Button"/"Link"/"Chart"/"Trend"/"Details"
+  // default), while typed strings stay verbatim.
+  const html = renderHtml({
+    title: 'ws',
+    sections: [{ content: [
+      { type: 'stat', label: '   ', prefix: '   ', suffix: '   ', caption: '   ', value: '12' },
+      { type: 'stat', label: 's', value: '13', caption: 'real' },
+      { type: 'chart', kind: 'line', title: '   ', caption: '   ', data: [1, 2] },
+      { type: 'chart', kind: 'line', title: 'Ty', caption: '  c  ', data: [3, 4] },
+      { type: 'sparkline', title: '   ', caption: '   ', data: [1, 2, 3] },
+      { type: 'sparkline', title: 'Ty', caption: '  c  ', data: [3, 4, 5] },
+      { type: 'code', title: '   ', lang: '   ', code: 'x' },
+      { type: 'gauge', value: 42, suffix: '   ' },
+      { type: 'gauge', value: 43, suffix: ' MB' },
+      { type: 'details', summary: '   ', content: ['deep'] },
+      { type: 'button', text: '   ' },
+      { type: 'button', text: '  Go  ' },
+      { type: 'link', text: '   ', href: '#a' },
+      { type: 'card', text: '   ' },
+    ]}],
+  });
+  assert.ok(!html.includes('aria-label="   "'), 'no whitespace-only aria-label');
+  assert.ok(!html.includes('data-chart-title="   "'), 'no whitespace chart title');
+  assert.ok(!html.includes('role="region" aria-label="   "'), 'no whitespace code region');
+  assert.ok(!html.includes('<div class="dg-stat-caption">   </div>'), 'whitespace caption renders no caption block');
+  assert.ok(!html.includes('<div class="dg-chart-title">   </div>'), 'whitespace chart title falls back to Chart');
+  assert.ok(!html.includes('<div class="dg-sparkline-title">   </div>'), 'whitespace sparkline title falls back to Trend');
+  assert.ok(!html.includes('<div class="dg-gauge-title">   </div>'), 'whitespace gauge title renders no title block');
+  assert.match(html, /dg-btn dg-btn--primary">Button<\/button>/, 'whitespace button text falls back to Button');
+  assert.match(html, /dg-btn dg-btn--primary">\s*Go\s*<\/button>/, 'trimmed button text keeps real text');
+  assert.match(html, /class="dg-link"[^>]*>Link<\/a>/, 'whitespace link text falls back to Link');
+  assert.match(html, /class="dg-card"><\/div>/, 'whitespace card body renders no content');
+  assert.match(html, /aria-label="12"/, 'whitespace stat prefix/suffix/label leave only the value');
+  assert.match(html, /aria-label="s: 13"/, 'whitespace stat stays out of the value figure');
+  assert.match(html, /<div class="dg-stat-caption">real<\/div>/, 'typed stat caption renders its caption block');
+  assert.match(html, /data-chart-title="Chart"/, 'whitespace chart title falls back to Chart');
+  assert.match(html, /data-chart-title="Ty"/, 'typed chart title stays verbatim');
+  assert.match(html, /<p class="dg-note">c<\/p>/, 'typed chart caption trims to its content');
+  assert.match(html, /aria-label="42"/, 'whitespace gauge suffix leaves a bare numeric readout');
+  assert.match(html, /aria-label="43 MB"/, 'typed gauge suffix stays verbatim');
+  const details = renderHtml({
+    title: 'wsd',
+    sections: [{ content: [{ type: 'details', summary: '   ', content: ['deep'] }] }],
+  });
+  assert.match(details, /<summary[^>]*>Details<\/summary>/, 'whitespace details summary falls back to Details');
+  const code = renderHtml({
+    title: 'wsc',
+    sections: [{ content: [{ type: 'code', title: '   ', lang: '   ', code: 'x' }] }],
+  });
+  const codeBody = code.slice(code.indexOf('<main'), code.indexOf('</main>') + 7);
+  assert.ok(!codeBody.includes('dg-code-header'), 'whitespace title/lang render no code header');
+  assert.ok(!codeBody.includes('data-code-lang='), 'whitespace lang renders no lang attribute');
+});
+
 test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
   // components.js renderStat: a delta string Number() can't parse and a
   // non-numeric progress value are silently dropped, progress is clamped into
