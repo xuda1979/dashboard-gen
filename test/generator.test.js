@@ -3701,6 +3701,100 @@ test('round-6: whitespace-only text slots in badge/quote/callout degrade to empt
   assert.match(body, /<p class="dg-callout-body">Tip: pin deps\.<\/p>/, 'typed callout body stays verbatim (trimmed)');
 });
 
+test('round-7: whitespace-only titles and remaining text slots degrade to empty, typed text stays verbatim (trimmed)', () => {
+  // The sweeps to this point covered standalone text slots (round-6) and
+  // prefix/suffix slots (round-5), but section titles and several text slots
+  // keyed on raw truthiness still let a whitespace-only string through:
+  //   - render.js sectionTitle/sectionAnchors/renderNav auto-nav keyed `s.title`
+  //     truthiness, so a '   ' title fabricated `<h2 ... id="s-item">   </h2>`,
+  //     a dead `href="#"` nav link, and a `s-item` anchor from never-titled
+  //     sections;
+  //   - renderToc emitted a `<a>` for a whitespace title under the raw
+  //     truthiness check;
+  //   - renderHeadline untrimmed text, renderParagraph body (link variant),
+  //     quote cite, status item detail, heatmap columns header, breadcrumbs
+  //     label, kv key/value, timeline time, and tabs content/text all let the
+  //     literal whitespace print.
+  // Whitespace is absent like blank: the slot trims and degrades to the empty
+  // rendering the blank pins already established, while typed strings (internal
+  // spacing trimmed on standalone slots) stay verbatim.
+  const html = renderHtml({
+    title: 'ws7',
+    sections: [
+      // A whitespace-only section title is absent: no h2 header, no auto-nav
+      // link, no anchor, no toc entry — yet the section body still renders.
+      { title: '   ', content: [{ type: 'paragraph', text: 'lead ws' }] },
+      {
+        // A typed title with padding trims on every standalone slot that names
+        // the section (header, auto-nav link, toc entry).
+        title: ' Pad ',
+        content: [
+          { type: 'headline', text: '   ' },
+          { type: 'headline', text: 'Real' },
+          { type: 'paragraph', text: '   ' },
+          { type: 'paragraph', text: 'Body' },
+          { type: 'quote', text: 'q', cite: '   ' },
+          { type: 'quote', text: 'q2', cite: 'RealCite' },
+          {
+            type: 'status',
+            state: 'ok',
+            items: [
+              { name: 'a', state: 'ok', detail: '   ' },
+              { name: 'b', state: 'ok', detail: 'down since 2h' },
+            ],
+          },
+          { type: 'heatmap', title: 'h', columns: ['   ', 'Mon', ' Tue '], rows: [{ label: 'r', values: [1, 2, 3] }] },
+          { type: 'breadcrumbs', items: [{ label: '   ' }, { label: 'real' }] },
+          {
+            type: 'kv',
+            items: [
+              { key: '   ', value: 'v' },
+              { key: 'k2', value: '  v2  ' },
+              { key: '   ', value: '   ' },
+            ],
+          },
+          {
+            type: 'timeline',
+            items: [
+              { text: 't', time: '   ' },
+              { text: 't2', time: '09:00' },
+            ],
+          },
+          { type: 'tabs', tabs: [{ text: '   ' }, { text: ' real ' }] },
+          { type: 'toc', label: 'x' },
+        ],
+      },
+    ],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  // Whitespace section title: no header, no anchor, no nav/toc link named it.
+  assert.ok(!/<h2 class="dg-section-title"[^>]*>\s+<\/h2>/.test(body), 'whitespace section title renders no header padding');
+  assert.ok(!/id="s-item"/.test(html), 'whitespace section title fabricates no s-item anchor');
+  assert.ok(!/href="#s-item"/.test(html), 'whitespace section title fabricates no nav/toc link');
+  assert.match(body, /<h2 class="dg-section-title" id="s-pad">Pad<\/h2>/, 'typed section title trims on the header');
+  // The auto nav renders above <main>, outside the body slice.
+  assert.match(html, /<a class="dg-navlink" href="#s-pad">Pad<\/a>/, 'typed section title trims on the auto-nav link');
+  assert.match(body, /<a class="dg-toc-link" href="#s-pad">Pad<\/a>/, 'typed section title trims on the toc entry');
+  // Content slots: whitespace degrades, typed text stays verbatim (trimmed).
+  assert.match(body, /<h2 class="dg-headline dg-h2"><\/h2>/, 'whitespace headline renders an empty h2');
+  assert.match(body, /<h2 class="dg-headline dg-h2">Real<\/h2>/, 'typed headline stays verbatim');
+  assert.match(body, /<p class="dg-paragraph"><\/p>/, 'whitespace paragraph body renders an empty paragraph');
+  assert.match(body, /<p class="dg-paragraph">Body<\/p>/, 'typed paragraph body stays verbatim');
+  assert.match(body, /<blockquote class="dg-quote"><p>q<\/p><\/blockquote>/, 'whitespace quote cite emits no cite footer');
+  assert.match(body, /<footer class="dg-quote-cite">— RealCite<\/footer>/, 'typed quote cite stays verbatim');
+  assert.ok(!/<span class="dg-status-detail">\s+<\/span>/.test(body), 'whitespace status detail renders no padding span');
+  assert.match(body, /<span class="dg-status-detail">down since 2h<\/span>/, 'typed status detail stays verbatim');
+  assert.match(body, /<th scope="col">Mon<\/th><th scope="col">Tue<\/th>/, 'whitespace heatmap column header is dropped, typed header trims');
+  assert.match(body, /<span class="dg-breadcrumbs-text"><\/span>/, 'whitespace breadcrumbs label renders the empty-item span');
+  assert.match(body, /<span class="dg-breadcrumbs-current" aria-current="page">real<\/span>/, 'typed breadcrumbs label stays verbatim');
+  assert.match(body, /<div class="dg-kv-row"><dt><\/dt><dd>v<\/dd><\/div>/, 'whitespace kv key degrades to an empty dt with the typed value');
+  assert.match(body, /<div class="dg-kv-row"><dt>k2<\/dt><dd>v2<\/dd><\/div>/, 'typed kv key/value both trim');
+  assert.ok(!/dg-timeline-time"[^>]*>\s+</.test(body), 'whitespace timeline time renders no padded slot');
+  assert.match(body, /<time class="dg-timeline-time" datetime="09:00">09:00<\/time>/, 'typed timeline time stays verbatim');
+  assert.match(body, /<div class="dg-tab-panel"><p class="dg-paragraph"><\/p><\/div>/, 'whitespace tab content renders an empty paragraph');
+  assert.match(body, /<div class="dg-tab-panel"><p class="dg-paragraph">real<\/p><\/div>/, 'typed tab content stays verbatim (trimmed)');
+});
+
 test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
   // components.js renderStat: a delta string Number() can't parse and a
   // non-numeric progress value are silently dropped, progress is clamped into
