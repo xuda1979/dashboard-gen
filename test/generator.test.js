@@ -3428,6 +3428,55 @@ test('stat and stat-list drop blank-string deltas as absent, not a fabricated 0'
   assert.match(body, /class="dg-statlist-delta dg-statlist-delta--neutral"[^>]*>▲ 8</);
 });
 
+test('stat and stat-list treat non-finite numeric values as absent, not literal text', () => {
+  // components.js renderStat/renderStatList: the card value passed through
+  // normalizeText with no finite check, so a non-finite numeric value —
+  // which isNaN-style guards miss (isNaN(Infinity) === false) — spelled
+  // itself as a literal "Infinity", "-Infinity" or "NaN" figure next to the
+  // label (and into the accessible name). A non-finite numeric value now
+  // degrades like a missing one across the stat card and the stat-list row
+  // cell; only the malformed reading drops, so display strings the author
+  // typed ("~1.2k", or even a literal "Infinity") stay verbatim.
+  const html = renderHtml({
+    title: 'nonfinite-stats',
+    sections: [{
+      content: [
+        { type: 'stat', label: 'Inf', value: Infinity },
+        { type: 'stat', label: 'Neath', value: -Infinity },
+        { type: 'stat', label: 'Nan', value: NaN },
+        { type: 'stat', label: 'TextInf', value: 'Infinity' },
+        { type: 'stat', label: 'Real', value: '~1.2k' },
+        { type: 'stat', label: 'Num', value: 42 },
+        { type: 'stat', label: 'Zero', value: 0 },
+        {
+          type: 'stat-list',
+          items: [
+            { label: 'A', value: Infinity },
+            { label: 'B', value: NaN },
+            { label: 'C', value: 'Infinity' },
+            { label: 'D', value: '7' },
+          ],
+        },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  assert.match(body, /dg-stat" role="img" aria-label="Inf: "/, 'Infinity value degrades like a missing one');
+  assert.match(body, /dg-stat" role="img" aria-label="Neath: "/, '-Infinity value degrades like a missing one');
+  assert.match(body, /dg-stat" role="img" aria-label="Nan: "/, 'NaN value degrades like a missing one');
+  assert.match(body, /dg-stat" role="img" aria-label="TextInf: Infinity"/, 'a typed string "Infinity" stays verbatim');
+  assert.match(body, /dg-stat" role="img" aria-label="Real: ~1.2k"/, 'display strings stay verbatim');
+  assert.match(body, /dg-stat" role="img" aria-label="Num: 42"/, 'real numeric values still render');
+  assert.match(body, /dg-stat" role="img" aria-label="Zero: 0"/, 'a real zero still renders');
+  const listValues = body.match(/class="dg-statlist-value">([^<]*)/g) || [];
+  assert.deepEqual(listValues, [
+    'class="dg-statlist-value">',
+    'class="dg-statlist-value">',
+    'class="dg-statlist-value">Infinity',
+    'class="dg-statlist-value">7',
+  ], 'non-finite stat-list row values degrade away; typed strings stay');
+});
+
 test('stat falls back to title label and to a bare stat aria-label', () => {
   // components.js renderStat: the figure label is `c.label || c.title || ''`.
   // A stat given only a `title:` uses it as the label, and one with neither
