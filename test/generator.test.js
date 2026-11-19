@@ -4311,6 +4311,50 @@ test('stat and stat-list treat non-finite numeric values as absent, not literal 
   assert.match(body, /class="dg-statlist-delta dg-statlist-delta--neutral"[^>]*>▲ 2</);
 });
 
+test('round-13: finite 0 stays verbatim in every text slot, including falsy-guarded ones', () => {
+  // The normalize-then-guard pattern resets each slot on a trim-real result,
+  // but several text slots were still fronted by `c.text || ''`-style raw
+  // truthiness (paragraph, badge, quote, callout), an `if (c.title)` guard
+  // (card), a chain fallback (breadcrumbs), and a truthy shorthand detection
+  // (grid card cells). 0 is falsy, so a legitimately typed zero was eaten and
+  // the slot rendered empty — while card text, stat value, list items and
+  // steps already kept 0 verbatim (the normalizeText contract: "finite numbers
+  // stay verbatim"). This pins the same contract across the remaining slots.
+  const html = renderHtml({
+    title: 'zero13',
+    sections: [{ content: [
+      { type: 'badge', text: 0 },
+      { type: 'quote', text: 0, cite: 0 },
+      { type: 'callout', title: 0, text: 0 },
+      { type: 'paragraph', text: 0 },
+      { type: 'card', title: 0, text: 0 },
+      { type: 'code', code: 0 },
+      { type: 'status', items: [{ name: 'API', state: 'ok', detail: 0 }] },
+      { type: 'grid', columns: 2, items: [{ text: 0 }, { title: 0 }] },
+    ]}],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  assert.match(body, /<span class="dg-badge dg-badge--neutral">0<\/span>/, 'badge text 0 stays verbatim');
+  assert.match(body, /<blockquote class="dg-quote"><p>0<\/p>/, 'quote body 0 stays verbatim');
+  assert.match(body, /<footer class="dg-quote-cite">— 0<\/footer>/, 'quote cite 0 stays verbatim');
+  assert.match(
+    body,
+    /<div class="dg-callout dg-callout--primary" role="note" aria-label="0"><div class="dg-callout-title">0<\/div><p class="dg-callout-body">0<\/p>/,
+    'callout title and body 0 stay verbatim'
+  );
+  assert.match(body, /<p class="dg-paragraph">0<\/p>/, 'paragraph body 0 stays verbatim');
+  assert.match(body, /<div class="dg-card"><h3 class="dg-card-title">0<\/h3>0<\/div>/, 'card title and body 0 stay verbatim');
+  assert.match(body, /<code class="dg-code-body">0<\/code>/, 'code body 0 stays verbatim');
+  assert.match(body, /<span class="dg-status-detail">0<\/span>/, 'status detail 0 stays verbatim');
+  assert.match(body, /<div class="dg-cell"><div class="dg-card">0<\/div><\/div>/, 'grid text-only 0 still detects the card shorthand');
+  assert.match(
+    body,
+    /<div class="dg-cell"><div class="dg-card"><h3 class="dg-card-title">0<\/h3><\/div><\/div>/,
+    'grid title-only 0 still detects the card shorthand'
+  );
+  assert.ok(!body.includes('[object Object]'), 'no grid shorthand falls through to a literal [object Object]');
+});
+
 test('bare-label surfaces treat non-finite numeric values as absent, not literal text', () => {
   // components.js: bare (non-object) items that reach String() before
   // normalizeText bypass the central guard — isNaN(Infinity) === false slips
