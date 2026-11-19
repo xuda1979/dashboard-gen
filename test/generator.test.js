@@ -7120,6 +7120,67 @@ test('callout component renders an empty body when no text is given', () => {
   assert.match(html, /<div class="dg-callout dg-callout--primary" role="note" aria-label="Heads up">/);
 });
 
+test('whitespace-only text slots degrade to empty instead of literal padding', () => {
+  // A padding-only string is "absent, not literal": it must not render a slot
+  // full of spaces in any text-bearing component. Guarded slots degrade to the
+  // documented empty convention (empty <p>/<li>/<dt>/<dd>/<span>) while typed
+  // neighbours keep their content.
+  const html = renderHtml({
+    title: 't',
+    nav: [
+      { type: 'link', text: '   ', href: '#x' },
+    ],
+    sections: [{ title: '   ', content: [
+      { type: 'headline', text: '   ' },
+      { type: 'headline', text: 'Real head' },
+      { type: 'paragraph', text: '   ', href: '#a' },
+      { type: 'paragraph', text: 'lead', href: '#a' },
+      { type: 'list', items: ['   ', 'real item', null] },
+      { type: 'quote', text: 'q', cite: '   ' },
+      { type: 'kv', items: [{ key: '   ', value: 'v' }, { key: 'real k', value: '   ' }, { key: 'a', value: 'b' }] },
+      { type: 'def-list', items: [{ key: '   ', value: 'v' }, { key: 'real k', value: '   ' }, { key: 'a', value: 'b' }] },
+      { type: 'status', items: [{ name: 'svc', state: 'healthy', detail: '   ' }, { name: 'svc2', state: 'degraded', detail: 'p99 40ms' }] },
+      { type: 'heatmap', columns: ['   ', 'MWF'], rows: [{ label: 'r1', values: [1, 2] }] },
+      { type: 'breadcrumbs', items: ['   ', { label: '   ', href: '#x' }, { label: 'cur', href: '#c' }, { label: 'end', href: '#e' }] },
+      { type: 'tabs', tabs: [{ label: 'T1', text: '   ' }, { label: 'T2', text: 'real' }] },
+      { type: 'tabs', tabs: [{ label: 'L', content: ['  ', 'real str'] }] },
+      { type: 'details', summary: 'D', text: '   ' },
+      { type: 'details', summary: 'D2', text: 'real details' },
+      { type: 'details', summary: 'D3', content: ['  ', 'real bare'] },
+      { type: 'timeline', items: [{ text: 'ev1', time: '   ' }, { text: 'ev2', time: '10:30' }] },
+      { type: 'footnote', text: 'ok', label: '   ' },
+    ]}],
+  });
+  const leaks = [
+    ['headline whitespace', /<h2 class="dg-headline dg-h2">\s+<\/h2>/g],
+    ['paragraph whitespace', /<p class="dg-paragraph">\s+<\/p>/g],
+    ['list item whitespace', /<li>\s+<\/li>/g],
+    ['quote cite whitespace', /<footer class="dg-quote-cite">—\s+<\/footer>/g],
+    ['kv key whitespace', /<div class="dg-kv-row"><dt>\s+<\/dt>/g],
+    ['kv value whitespace', /<div class="dg-kv-row"><dd>\s+<\/dd>/g],
+    ['def-list key/value whitespace', /<div class="dg-def-list-row"><dt>\s+<\/dt><dd>\s+<\/dd>/g],
+    ['status detail whitespace', /<span class="dg-status-detail">\s+<\/span>/g],
+    ['heatmap header whitespace', /<th[^>]*>\s+<\/th>/g],
+    ['breadcrumb whitespace', /<span class="dg-breadcrumbs-text">\s+<\/span>|<a class="dg-breadcrumbs-link"[^>]*>\s+<\/a>|<span class="dg-breadcrumbs-current">\s+<\/span>/g],
+    ['tabs text whitespace', /<div class="dg-tab-panel"><p class="dg-paragraph">\s+<\/p>/g],
+    ['details text whitespace', /<div class="dg-details-body"><p class="dg-paragraph">\s+<\/p>/g],
+    ['timeline time whitespace', /<time[^>]*>\s+<\/time>|<span class="dg-timeline-time">\s+<\/span>/g],
+  ];
+  for (const [label, re] of leaks) {
+    assert.ok(!re.test(html), `${label} must not contain literal spaces`);
+  }
+  // Typed neighbours survive with their content intact.
+  assert.match(html, /<h2 class="dg-headline dg-h2">Real head<\/h2>/);
+  assert.match(html, /<p class="dg-paragraph">lead <a href="#a" class="dg-link">#a<\/a><\/p>/, 'abutting link keeps its separating space after a real body');
+  assert.match(html, /<ul class="dg-ul"><li><\/li><li>real item<\/li><li><\/li><\/ul>/, 'whitespace item degrades to an empty cell, mid item keeps text');
+  assert.match(html, /<span class="dg-status-detail">p99 40ms<\/span>/);
+  assert.match(html, /<a class="dg-breadcrumbs-link" href="#c">cur<\/a>/);
+  assert.match(html, /<div class="dg-tab-panel"><p class="dg-paragraph">real<\/p>/);
+  assert.match(html, /<div class="dg-details-body"><p class="dg-paragraph">real details<\/p>/);
+  assert.match(html, /<div class="dg-details-body">[\s\S]*?<p class="dg-paragraph">real bare<\/p>/, 'bare content item typed text survives after the padded empty item');
+  assert.match(html, /<time class="dg-timeline-time" datetime="10:30">10:30<\/time>/);
+});
+
 test('table header:false treats numeric first rows as body data', () => {
   // rowsToTableData auto-detects a header for array-of-arrays only when the
   // first row is strings; `header: false` must also suppress the header for
