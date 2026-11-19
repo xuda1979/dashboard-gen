@@ -3346,16 +3346,39 @@ test('page-level nav renders a labelled nav from { label, href } items', () => {
 test('explicit nav item label and href fall backs', () => {
   // A page-level `nav:` item may omit the label (the href text is used instead)
   // or the href (falls back to "#"); an item with neither still renders a link
-  // with an empty text and a bare "#" instead of crashing.
+  // with an empty text and a bare "#" instead of crashing. A padding-only label
+  // or href degrades the same way: a whitespace-only label is absent like a
+  // missing one (it falls through to the href text, and an all-blank item is
+  // dropped entirely rather than emitting a dead "#" anchor), and a padded href
+  // is trimmed like every other text slot.
   const doc = {
     title: 'nav-fb',
-    nav: [{ href: '#docs' }, { label: 'Home' }, {}],
+    nav: [
+      { href: '#docs' },
+      { label: 'Home' },
+      {},
+      { label: '   ', href: '#pad-label' },
+      { label: 'Share', href: '   ' },
+      { label: '  Trimmed  ', href: '  #trimmed  ' },
+      'malformed',
+      null,
+    ],
     sections: [],
   };
   const html = renderHtml(doc);
   assert.match(html, /<li><a class="dg-navlink" href="#docs">#docs<\/a><\/li>/);
   assert.match(html, /<li><a class="dg-navlink" href="#">Home<\/a><\/li>/);
-  assert.match(html, /<li><a class="dg-navlink" href="#"><\/a><\/li>/);
+  const navHtml = html.slice(html.indexOf('<nav class="dg-nav"'), html.indexOf('</nav>') + 6);
+  assert.ok(!/href="[^"#\s]*\s*"/.test(navHtml), 'no padding-only href is emitted in the nav');
+  assert.match(html, /<li><a class="dg-navlink" href="#pad-label">#pad-label<\/a><\/li>/,
+    'a padding-only label falls through to the href text instead of rendering spaces');
+  assert.match(html, /<li><a class="dg-navlink" href="#">Share<\/a><\/li>/,
+    'a padding-only href degrades to the bare "#" fallback');
+  assert.match(html, /<li><a class="dg-navlink" href="#trimmed">Trimmed<\/a><\/li>/,
+    'labels and hrefs are trimmed');
+  assert.ok(!/href=""/.test(navHtml), 'items with no label or href are dropped, not empty anchors');
+  assert.strictEqual((navHtml.match(/class="dg-navlink"/g) || []).length, 5,
+    'malformed and padding-only items are dropped instead of publishing dead links');
 });
 
 test('page-level nav auto-links section titles when no nav key is given', () => {
