@@ -1230,6 +1230,13 @@ test('chart start option treats nullish or blank values as absent, not a zero ba
     // into NaN — a fabricated attribute carrying no usable baseline.
     [true, false],
     [false, false],
+    // A non-finite numeric start is absent too: isNaN(Infinity) === false slips
+    // it past an isNaN-style guard, but the runtime would keep the non-finite
+    // baseline and the y-span computation degrades. Same class as the blank
+    // string: no usable baseline, so no attribute.
+    [Infinity, false],
+    [-Infinity, false],
+    [NaN, false],
   ];
   for (const [start, expected] of cases) {
     const html = renderHtml({
@@ -3571,6 +3578,88 @@ test('stat and stat-list treat non-finite numeric values as absent, not literal 
   const listDeltas = body.match(/class="dg-statlist-delta/g) || [];
   assert.strictEqual(listDeltas.length, 1, 'only the finite list delta renders a stat-list cell');
   assert.match(body, /class="dg-statlist-delta dg-statlist-delta--neutral"[^>]*>▲ 2</);
+});
+
+test('bare-label surfaces treat non-finite numeric values as absent, not literal text', () => {
+  // components.js: bare (non-object) items that reach String() before
+  // normalizeText bypass the central guard — isNaN(Infinity) === false slips
+  // them past an isNaN-style check, so each site guards numeric non-finite
+  // values before coercion. A typed 'Infinity' string stays verbatim, exactly
+  // like a stat value does.
+  const html = renderHtml({
+    title: 'nonfinite-bare',
+    sections: [{
+      content: [
+        { type: 'stat-list', items: [Infinity, -Infinity, NaN, 'Infinity', { label: 'Real', value: '2' }] },
+        { type: 'kv', items: [Infinity, 'Infinity', { key: 'Real', value: 'v' }] },
+        { type: 'def-list', items: [Infinity, 'Infinity', { key: 'Real', value: 'v' }] },
+        { type: 'grid', columns: 2, items: [NaN, 'Infinity', 'plain', 42] },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  assert.deepEqual(
+    body.match(/class="dg-statlist-row"><th scope="row">([^<]*)<\/th>/g) || [],
+    ['class="dg-statlist-row"><th scope="row"></th>', 'class="dg-statlist-row"><th scope="row"></th>', 'class="dg-statlist-row"><th scope="row"></th>', 'class="dg-statlist-row"><th scope="row">Infinity</th>', 'class="dg-statlist-row"><th scope="row">Real</th>'],
+    'stat-list bare Infinity/-Infinity/NaN labels degrade to empty; the typed "Infinity" string and a real label stay'
+  );
+  const kvTerms = body.match(/class="dg-kv-row"><dt>([^<]*)<\/dt><dd>([^<]*)/g) || [];
+  assert.deepEqual(kvTerms, [
+    'class="dg-kv-row"><dt></dt><dd>',
+    'class="dg-kv-row"><dt>Infinity</dt><dd>',
+    'class="dg-kv-row"><dt>Real</dt><dd>v',
+  ], 'kv bare Infinity key degrades to an empty term; the typed string stays');
+  const defTerms = body.match(/class="dg-def-list-row"><dt>([^<]*)<\/dt><dd>([^<]*)/g) || [];
+  assert.deepEqual(defTerms, [
+    'class="dg-def-list-row"><dt>Infinity</dt><dd>',
+    'class="dg-def-list-row"><dt>Real</dt><dd>v',
+  ], 'def-list bare Infinity drops the whole row (empty term value pair); the typed string stays');
+  const cells = body.match(/class="dg-cell">([^<]*)<\/div>/g) || [];
+  assert.deepEqual(cells, [
+    'class="dg-cell"></div>',
+    'class="dg-cell">Infinity</div>',
+    'class="dg-cell">plain</div>',
+    'class="dg-cell">42</div>',
+  ], 'grid scalar NaN cell degrades to empty; the typed string, text and a real number stay');
+});
+
+test('status state and collapsible/tab content treat non-finite values as absent', () => {
+  // components.js renderStatus: item.state went straight into String() and
+  // .toLowerCase() — a numeric NaN/Infinity became a literal "Infinity"/"nan"
+  // status label instead of degrading to the "Unknown" fallback. renderDetails
+  // and renderTabs body items bypass normalizeText too, so their non-finite
+  // content items must render an empty paragraph rather than a literal.
+  const html = renderHtml({
+    title: 'nonfinite-status',
+    sections: [{
+      content: [
+        {
+          type: 'status',
+          items: [
+            { name: 'Mid', state: Infinity },
+            { name: 'Neath', state: -Infinity },
+            { name: 'Nan', state: NaN },
+            { name: 'Up', state: 'healthy' },
+          ],
+        },
+        { type: 'details', title: 'D', content: [Infinity, 'real text'] },
+        { type: 'tabs', tabs: [{ label: 'T', content: [NaN, 'real'] }] },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  const states = body.match(/dg-status-state dg-status-state--([a-z]+)">([^<]*)<\/span>/g) || [];
+  assert.deepEqual(states, [
+    'dg-status-state dg-status-state--unknown">Unknown</span>',
+    'dg-status-state dg-status-state--unknown">Unknown</span>',
+    'dg-status-state dg-status-state--unknown">Unknown</span>',
+    'dg-status-state dg-status-state--healthy">Healthy</span>',
+  ], 'non-finite status states degrade to the Unknown fallback, never a literal Infinity/nan label');
+  assert.ok(!/Infinity|NaN/.test(body), 'no literal non-finite text leaks into the body');
+  assert.match(body, /<div class="dg-details-body"><p class="dg-paragraph"><\/p>\n<p class="dg-paragraph">real text<\/p><\/div>/,
+    'details content non-finite item renders an empty paragraph and the real item stays');
+  assert.match(body, /<div class="dg-tab-panel"><p class="dg-paragraph"><\/p>\n<p class="dg-paragraph">real<\/p><\/div>/,
+    'tabs content non-finite item renders an empty paragraph and the real item stays');
 });
 
 test('stat falls back to title label and to a bare stat aria-label', () => {
