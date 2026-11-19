@@ -843,6 +843,33 @@ test('runtime draws a mixed-sign line spanning the zero baseline right-way-up', 
   assert.ok(Math.min(...tickVals) < 0 && Math.max(...tickVals) > 0, 'axis spans the zero baseline (a negative and a positive tick)');
 });
 
+test('runtime renders an all-zero bar frame flat on the baseline instead of dividing by zero', () => {
+  // barSvg spans from minV to maxV, which are both 0 for an all-zero dataset
+  // (an empty period of a real metric). With no spread, y(v) would divide by
+  // zero; the runtime must force a unit-wide domain (0..1) so the axis stays
+  // sane, the bars sit on the zero baseline, and no NaN leaks out.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: bar\n        title: Zero\n        data:\n          - { label: A, series: { p: 0 } }\n          - { label: B, series: { p: 0 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'Zero' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'A', series: { p: 0 } }, { label: 'B', series: { p: 0 } }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(!/NaN|Infinity/.test(out), 'bar chart leaks no NaN/Infinity');
+  const rects = out.match(/<rect class="dg-bar" x="([\d.]+)" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g);
+  assert.strictEqual(rects ? rects.length : 0, 2, 'one bar per row');
+  for (const r of rects) {
+    const m = /y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/.exec(r);
+    const y = Number(m[1]), h = Number(m[2]);
+    assert.strictEqual(h, 0, `zero value renders a zero-height bar (got h ${h})`);
+    assert.ok(y >= 280 && y <= 300, `zero bar sits on the zero baseline, not off-canvas (got y ${y})`);
+  }
+  const ticks = out.match(/<text class="dg-axis"(?! dg-axis-x)[^>]*>(-?[\d.]+)<\/text>/g) || [];
+  const tickVals = ticks.map((t) => Number(/-?[\d.]+(?=<\/text>)/.exec(t)[0]));
+  assert.deepStrictEqual(tickVals, [0, 0.25, 0.5, 0.75, 1], 'zero-span domain is forced to a unit 0..1 axis');
+});
+
 test('runtime draws one pie slice per series key in a single data row', () => {
   // README: pie accepts "a single row with a multi-key series: map (one slice
   // per series key)". The runtime must explode that one row into slices, not
