@@ -3319,6 +3319,48 @@ test('stat progress strip treats nullish or blank values as absent, not a fabric
   ], 'blank progress values render no strip; a real zero and numeric strings still do');
 });
 
+test('stat and stat-list drop blank-string deltas as absent, not a fabricated 0', () => {
+  // parseDelta (components.js:136): the null guard dropped null but let ''
+  // and '   ' through, where Number('') === 0 fabricated a "0" trend chip
+  // next to a real figure in both stat and stat-list. Blank delta is absent
+  // like a missing one; a real zero still warrants a bare "0" chip.
+  const html = renderHtml({
+    title: 'deltas',
+    sections: [{
+      content: [
+        { type: 'stat', label: 'Blank', value: '1', delta: '' },
+        { type: 'stat', label: 'Space', value: '2', delta: '   ' },
+        { type: 'stat', label: 'Null', value: '3', delta: null },
+        { type: 'stat', label: 'Zero', value: '4', delta: 0 },
+        { type: 'stat', label: 'Numeric', value: '5', delta: '5' },
+      ],
+    }, {
+      title: 'list',
+      content: [{
+        type: 'stat-list',
+        items: [
+          { label: 'Blank', value: '1', delta: '' },
+          { label: 'Space', value: '2', delta: '   ' },
+          { label: 'Null', value: '3', delta: null },
+          { label: 'None', value: '4' },
+          { label: 'Numeric', value: '5', delta: '8' },
+        ],
+      }],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  const deltas = body.match(/class="dg-stat-delta"/g) || [];
+  assert.deepEqual(deltas, [
+    'class="dg-stat-delta"',
+    'class="dg-stat-delta"',
+  ], 'blank and null deltas render no chip; a real zero and a numeric string still do');
+  assert.match(body, /class="dg-stat-delta"[^>]*>0</, 'zero delta renders the bare 0');
+  assert.match(body, /class="dg-stat-delta"[^>]*>▲ 5</, 'numeric-string delta still coerces');
+  const listDeltas = body.match(/class="dg-statlist-delta/g) || [];
+  assert.strictEqual(listDeltas.length, 1, 'only the finite list delta renders a cell');
+  assert.match(body, /class="dg-statlist-delta dg-statlist-delta--neutral"[^>]*>▲ 8</);
+});
+
 test('stat falls back to title label and to a bare stat aria-label', () => {
   // components.js renderStat: the figure label is `c.label || c.title || ''`.
   // A stat given only a `title:` uses it as the label, and one with neither
