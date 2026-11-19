@@ -3857,6 +3857,42 @@ test('round-7b: per-item label slots trim padding and let a padded field fall th
   assert.match(body, /<aside class="dg-footnote" role="doc-footnote" aria-label="Src">note<\/aside>/, 'padded footnote text trims');
 });
 
+test('round-8: steps/stepper/grid scalar cells trim padding on emit and degrade whitespace-only entries', () => {
+  // The earlier sweeps razor-trimmed the label slots that *guard* emptiness,
+  // but three list-bodied renderers still *emitted* the untrimmed value after a
+  // trim-based guard (steps), a trim-based skip (stepper), or no trim at all
+  // (grid scalar cells). A padded typed string therefore printed its literal
+  // padding, and a whitespace-only grid cell printed a bare run of spaces.
+  // Whitespace is absent like blank: the emit trims, so typed strings render
+  // edge-trimmed and whitespace-only entries degrade (steps/stepper drop the
+  // item, grid renders an empty cell).
+  const html = renderHtml({
+    title: 'r8',
+    sections: [{ content: [
+      { type: 'steps', items: ['  Set up  ', '   ', '  Deploy & verify  '] },
+      { type: 'stepper', items: ['  Build  ', '   ', '  Ship  '] },
+      { type: 'grid', items: ['  plain  ', '   ', 42, null, false] },
+    ] }],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  // Steps: whitespace-only item drops, padded typed text trims on emit.
+  assert.match(body, /<span class="dg-steps-text">Set up<\/span>/, 'padded steps text trims on emit');
+  assert.match(body, /<span class="dg-steps-text">Deploy &amp; verify<\/span>/, 'padded steps text with entities trims on emit');
+  assert.strictEqual((body.match(/<span class="dg-steps-text">/g) || []).length, 2, 'whitespace-only steps item is dropped');
+  assert.ok(!/<span class="dg-steps-text">\s+</.test(body), 'no steps text renders literal padding');
+  // Stepper: whitespace-only item skips (and its number disappears), padded
+  // typed text trims on emit.
+  assert.match(body, /<span class="dg-stepper-text">Build<\/span>/, 'padded stepper text trims on emit');
+  assert.match(body, /<span class="dg-stepper-text">Ship<\/span>/, 'second padded stepper text trims on emit');
+  assert.strictEqual((body.match(/<span class="dg-stepper-text">/g) || []).length, 2, 'whitespace-only stepper item is dropped');
+  assert.ok(!/<span class="dg-stepper-text">\s+</.test(body), 'no stepper text renders literal padding');
+  // Grid scalar cells: typed bare strings trim on emit, absent/non-finite/
+  // boolean degrade to an empty cell, whitespace-only degrades to an empty cell.
+  assert.match(body, /<div class="dg-cell">plain<\/div>/, 'padded grid scalar string trims on emit');
+  assert.match(body, /<div class="dg-cell">42<\/div>/, 'numeric grid scalar stays verbatim');
+  assert.strictEqual((body.match(/<div class="dg-cell">\s*<\/div>/g) || []).length, 3, 'whitespace/null/false grid scalars degrade to empty cells');
+});
+
 test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
   // components.js renderStat: a delta string Number() can't parse and a
   // non-numeric progress value are silently dropped, progress is clamped into
