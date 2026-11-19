@@ -5901,6 +5901,41 @@ test('grid component defaults to auto-fill with a columnWidth minimum', () => {
   assert.match(html, /style="grid-template-columns: repeat\(auto-fill, minmax\(180px, 1fr\)\);" data-grid-cols="3"/);
 });
 
+test('grid blank or null columnWidth falls back to the 220px default', () => {
+  // components.js renderGrid: the isFinite(Number(colW)) guard let ''/null
+  // through (Number(null) === Number('') === 0) and fabricated the malformed
+  // "minmax(px, 1fr)" / "minmax(nullpx, 1fr)" minimum. A blank or null
+  // columnWidth is absent like a missing one, so it degrades to 220px; a real
+  // zero width and numeric/px values are still honored.
+  const html = renderHtml({
+    title: 't',
+    sections: [{
+      content: [
+        { type: 'grid', columnWidth: '', items: [] },
+        { type: 'grid', columnWidth: '   ', items: [] },
+        { type: 'grid', columnWidth: null, items: [] },
+        { type: 'grid', columnWidth: 0, items: [] },
+        { type: 'grid', columnWidth: 240, items: [] },
+        { type: 'grid', columnWidth: '180px', items: [] },
+        { type: 'grid', items: [] },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  const mins = body.match(/minmax\(([^)]*), 1fr\)/g) || [];
+  assert.deepEqual(mins, [
+    'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
+    'minmax(0px, 1fr)',
+    'minmax(240px, 1fr)',
+    'minmax(180px, 1fr)',
+    'minmax(220px, 1fr)',
+  ], 'blank and null columnWidth fall back to 220px while real zero, numeric, and px values survive');
+  assert.ok(!/minmax\(px, 1fr\)|minmax\(nullpx, 1fr\)|minmax\(   px, 1fr\)/.test(body),
+    'no malformed minmax minimum leaks into the layout');
+});
+
 test('quote component renders text with optional cite footer', () => {
   const html = renderHtml({
     title: 't',
