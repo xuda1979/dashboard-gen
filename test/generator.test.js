@@ -5915,6 +5915,38 @@ test('table numeric first row is body data by default, header:true forces it', (
   );
 });
 
+test('table mixed-type first row stays in the body; header:true forces it up', () => {
+  // The all-strings header heuristic is what the code comment on
+  // rowsToTableData names: a mixed string+number row like ["Jan", 10] is a
+  // data row (per-period values), not column titles. Without a `header` key it
+  // must render as a body row-header, and `header: true` must force it into
+  // <thead> just like a numeric first row.
+  const html = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{ type: 'table', rows: [['Jan', 10], ['Feb', 12]] }],
+    }],
+  });
+  assert.match(
+    html,
+    /<table class="dg-table"><tbody><tr><th scope="row">Jan<\/th><td>10<\/td><\/tr><tr><th scope="row">Feb<\/th><td>12<\/td><\/tr><\/tbody>/,
+    'mixed-type first row stays in the body as a row header'
+  );
+  assert.ok(!html.includes('<thead>'), 'no auto header for a mixed-type first row');
+
+  const forced = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{ type: 'table', header: true, rows: [['Jan', 10], ['Feb', 12]] }],
+    }],
+  });
+  assert.match(
+    forced,
+    /<thead><tr><th scope="col">Jan<\/th><th scope="col">10<\/th><\/tr><\/thead><tbody><tr><td>Feb<\/td><td>12<\/td><\/tr><\/tbody>/,
+    'header: true forces the mixed-type first row into the header'
+  );
+});
+
 // ---------------------------------------------------------------------------
 // Fetch URL validation (lib/loader.js validateFetchUrl + render fetch binding)
 // ---------------------------------------------------------------------------
