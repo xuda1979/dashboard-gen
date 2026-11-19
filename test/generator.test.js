@@ -3998,6 +3998,76 @@ test('round-9: kv and def-list keys fall back from a padding-only key to the typ
   assert.ok(!/<dt><\/dt>/.test(body), 'no blank term is rendered where a label was provided');
 });
 
+test('round-10: list scalars degrade and text-slot fallbacks fire instead of leaking padding', () => {
+  // The absent-convention sweep pinned every guard-emitting renderer, but eight
+  // components were only audit-verified: list items, button/link text, card
+  // title/body, details summary/body, tabs label fallback, and status state.
+  // This pin locks the convention on each so a regression adds a failing pin
+  // instead of an unnoticed leak:
+  //   - list: blank/nullish/boolean/non-finite items degrade to an empty <li>
+  //     (the missing-item convention), padded typed strings trim, numbers stay;
+  //   - button/link: whitespace-only text degrades to the Button/Link fallback
+  //     when every candidate slot is padding-only, padded strings trim;
+  //   - card: whitespace-only title/body degrade to an empty card, padded text
+  //     trims (title block only when the title trims to something);
+  //   - details: whitespace-only summary/title degrade to the Details fallback
+  //     and the body to the missing-body convention (empty paragraph);
+  //   - tabs: whitespace-only label degrades to the Tab N default;
+  //   - status: a state string trims and lowercases, whitespace-only/boolean
+  //     states degrade to the Unknown reading instead of literal padding.
+  const html = renderHtml({
+    title: 'r10',
+    sections: [{
+      content: [
+        { type: 'list', items: ['  one  ', '   ', null, false, NaN, 42] },
+        { type: 'button', text: '   ' },
+        { type: 'button', text: '  Go  ' },
+        { type: 'link', text: '   ', label: '   ', href: '/a' },
+        { type: 'link', text: '  jump  ', href: '/b' },
+        { type: 'card', title: '   ', text: '   ' },
+        { type: 'card', title: '  T  ', text: '  body  ' },
+        { type: 'details', summary: '   ', title: '   ', text: '   ' },
+        { type: 'details', summary: '  S  ', text: '  b  ' },
+        { type: 'tabs', tabs: [{ text: '   ' }, { text: ' real ' }, { label: '   ', text: 'x' }] },
+        { type: 'status', items: [
+          { name: 'N', state: ' ok ' },
+          { name: 'M', state: '   ' },
+          { name: 'P', state: false },
+        ] },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  // list: padded strings trim, absent scalars degrade to empty <li>, 42 stays.
+  assert.match(body, /<li>one<\/li>/, 'padded list item trims on emit');
+  assert.match(body, /<li>42<\/li>/, 'numeric list item stays verbatim');
+  assert.strictEqual((body.match(/<li><\/li>/g) || []).length, 4, 'whitespace/null/false/NaN list items degrade to empty li');
+  assert.ok(!/<li>\s+<\/li>/.test(body), 'no list item renders literal padding');
+  // button/link: whitespace-only text falls back to the default name.
+  assert.match(body, /<button type="button" class="dg-btn dg-btn--primary">Button<\/button>/, 'whitespace-only button text falls back to Button');
+  assert.match(body, /<button type="button" class="dg-btn dg-btn--primary">Go<\/button>/, 'padded button text trims');
+  assert.match(body, /<a href="\/a" class="dg-link">Link<\/a>/, 'whitespace-only link text and label fall back to Link');
+  assert.match(body, /<a href="\/b" class="dg-link">jump<\/a>/, 'padded link text trims');
+  // card: whitespace-only title/body degrade to an empty card, padded text trims.
+  assert.match(body, /<div class="dg-card"><\/div>/, 'whitespace-only card title+body render an empty card');
+  assert.match(body, /<div class="dg-card"><h3 class="dg-card-title">T<\/h3>body<\/div>/, 'padded card title and body trim');
+  // details: whitespace-only summary/title/text degrade to the defaults/empty.
+  assert.match(body, /<details class="dg-details"><summary class="dg-details-summary">Details<\/summary>/, 'whitespace-only details summary/title fall back to Details');
+  assert.match(body, /<div class="dg-details-body"><p class="dg-paragraph"><\/p><\/div>/, 'whitespace-only details body renders the empty-paragraph convention');
+  assert.match(body, /<summary class="dg-details-summary">S<\/summary>/, 'padded details summary trims');
+  assert.match(body, /<p class="dg-paragraph">b<\/p>/, 'padded details body trims');
+  // tabs: whitespace-only label falls back to the Tab N default.
+  assert.match(body, /<label class="dg-tab-label" for="dg-tabs-0-0">Tab 1<\/label>/, 'whitespace-only tab label falls back to Tab 1');
+  assert.match(body, /<label class="dg-tab-label" for="dg-tabs-0-1">Tab 2<\/label>/, 'padded tab label trims');
+  assert.match(body, /<label class="dg-tab-label" for="dg-tabs-0-2">Tab 3<\/label>/, 'whitespace-only label with typed content still falls back to Tab 3');
+  assert.match(body, /<div class="dg-tab-panel"><p class="dg-paragraph">x<\/p><\/div>/, 'typed tab content stays verbatim alongside the label fallback');
+  // status: state trims/lowercases, whitespace-only/boolean states degrade.
+  assert.match(body, /<span class="dg-status-state dg-status-state--unknown">ok<\/span>/, 'padded status state trims and lowercases');
+  assert.match(body, /<span class="dg-status-state dg-status-state--unknown">Unknown<\/span>/, 'whitespace-only status state reads Unknown');
+  assert.strictEqual((body.match(/dg-status-state--unknown">Unknown</g) || []).length, 2, 'whitespace-only and boolean status states both read Unknown');
+  assert.ok(!/dg-status-state[^>]*>\s+</.test(body), 'no status state renders literal padding');
+});
+
 test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
   // components.js renderStat: a delta string Number() can't parse and a
   // non-numeric progress value are silently dropped, progress is clamped into
