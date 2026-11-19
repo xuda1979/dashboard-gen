@@ -1316,6 +1316,46 @@ test('chart runtime treats absent category labels as no label, not literal text'
   assert.ok(!pie.includes('>true<') && !pie.includes('>null<'), 'absent pie labels drop entirely');
 });
 
+test('chart runtime treats non-string or blank swatches as absent, not literal colors', () => {
+  // colorFor takes a swatch only when it is a non-blank string: String(true) ===
+  // 'true', a bare 16, and a whitespace value would otherwise spell literal text
+  // into the style="background:...", fill, and stroke attributes. Absent values
+  // fall back to the hashed palette exactly like a series without a swatch,
+  // while a real color string is used verbatim.
+  const html = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{
+        type: 'chart', kind: 'bar', title: 'T',
+        data: [{ label: 'Q', series: { A: 1, B: 2, C: 3, D: 4, E: 5 } }],
+        swatches: { A: true, B: 16, C: '   ', D: null, E: '#16a34a' },
+      }],
+    }],
+  });
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const attrs = { 'data-chart-data': 'chart-0', 'data-chart-type': 'bar', 'data-chart-title': 'T' };
+  const sw = html.match(/data-chart-swatches="([^"]*)"/);
+  // the DOM decodes &quot; back to " before the runtime JSON.parse sees it
+  attrs['data-chart-swatches'] = sw[1].replace(/&quot;/g, '"');
+  const figure = { getAttribute: (name) => (name in attrs ? attrs[name] : null), innerHTML: '' };
+  new Function('window', 'document', script)(
+    { __DG_DATA__: { 'chart-0': [{ label: 'Q', series: { A: 1, B: 2, C: 3, D: 4, E: 5 } }] } },
+    { readyState: 'complete', querySelectorAll: () => [figure], addEventListener: () => {} }
+  );
+  const out = figure.innerHTML;
+  assert.ok(!/fill="true"/.test(out) && !/background:true/.test(out), 'boolean swatch is not spelled into attributes');
+  assert.ok(!/fill="16"/.test(out) && !/fill="\s+"/.test(out), 'number/blank swatch is not spelled into fill');
+  assert.ok(!/fill="#ff0"/.test(out), 'non-string swatch value is not stringified');
+  assert.ok(!/background:\s+"/.test(out), 'no blank swatch in legend swatches');
+  // a genuine color string survives verbatim
+  assert.ok(out.includes('fill="#16a34a"'), 'real color swatch applies to the bar');
+  assert.ok(out.includes('style="background:#16a34a"'), 'real color swatch applies to the legend');
+  // every rendered series (including the absent-swatch ones) lands on a palette
+  // hex color, never a literal
+  const fills = out.match(/fill="#[0-9a-f]{6}"/g) || [];
+  assert.strictEqual(fills.length, 5, 'all five series bars carry a hex fill');
+});
+
 test('unknown chart kind falls back to line with a Chart label', () => {
   // renderChart treats only line/bar/pie as valid; anything else (typo, future
   // kind) must degrade to the line shell so the figure still renders.
