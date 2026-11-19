@@ -3622,6 +3622,55 @@ test('whitespace-only text slots degrade to absent or the documented default, no
   assert.ok(!codeBody.includes('data-code-lang='), 'whitespace lang renders no lang attribute');
 });
 
+test('round-5: whitespace-only slots in stat-list/heatmap/progress/terminal/breadcrumbs degrade, typed text stays', () => {
+  // The raw-truthiness/untripped guards in renderStatList (prefix/suffix),
+  // renderHeatmap (title), renderProgress (label), renderTerminal (prompt,
+  // title) and renderBreadcrumbs (label) let a whitespace-only string through,
+  // fabricating stale `   ` cells, `aria-label="   "` regions and paddings.
+  // Whitespace is absent like blank; prefix/suffix abut the value text so
+  // typed internal spacing (' MB') stays while a whitespace-only value drops.
+  const html = renderHtml({
+    title: 'ws5',
+    sections: [{ content: [
+      { type: 'stat-list', caption: '   ', items: [
+        { label: 'A', value: '5', prefix: '   ', suffix: '   ' },
+        { label: 'B', value: '5', prefix: 'q', suffix: '   ' },
+        { label: 'C', value: '5', prefix: '   ', suffix: '/m' },
+        { label: 'D', value: '5', prefix: ' ', suffix: ' MB' },
+      ] },
+      { type: 'stat-list', caption: 'Real', items: [{ label: 'E', value: '6' }] },
+      { type: 'heatmap', title: '   ', columns: ['a', 'b'], rows: [{ label: 'r', values: [1, 2] }] },
+      { type: 'heatmap', title: 'Fin', columns: ['a'], rows: [{ label: 'r', values: [2] }] },
+      { type: 'progress', value: 40, label: '   ' },
+      { type: 'progress', value: 40, label: '   ', title: 'Used' },
+      { type: 'terminal', title: '   ', prompt: '   ', items: [{ text: 'ls', level: 'cmd' }] },
+      { type: 'terminal', title: 'Deploy', prompt: '$ ', items: [{ text: 'run', level: 'cmd' }] },
+      { type: 'breadcrumbs', label: '   ', items: [{ label: 'a' }, { label: 'b' }] },
+      { type: 'breadcrumbs', label: 'Path', items: [{ label: 'a' }, { label: 'b' }] },
+    ]}],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  assert.ok(!body.includes('">   </td>'), 'whitespace-only stat-list prefix/suffix leave the value bare');
+  assert.ok(!body.includes('role="region" aria-label="   "'), 'whitespace terminal title renders no region');
+  assert.ok(!body.includes('<div class="dg-heatmap-title">   </div>'), 'whitespace heatmap title renders no title block');
+  assert.ok(!body.includes('aria-label="   : 40%"'), 'whitespace progress label leaves a bare percent figure');
+  assert.ok(!body.includes('<div class="dg-progress-label">   </div>'), 'whitespace progress label renders no label block');
+  assert.match(body, /<td class="dg-statlist-value">5<\/td>/, 'whitespace-only prefix/suffix leave fmt clean');
+  assert.match(body, /<td class="dg-statlist-value">q5<\/td>/, 'non-blank prefix stays');
+  assert.match(body, /<td class="dg-statlist-value">5\/m<\/td>/, 'typed suffix stays');
+  assert.match(body, /<td class="dg-statlist-value">5 MB<\/td>/, 'typed spaced suffix keeps internal spacing');
+  assert.match(body, /aria-label="Real"/, 'typed stat-list caption sets the table label');
+  assert.match(body, /class="dg-heatmap-table" aria-label="Heatmap"/, 'whitespace heatmap title falls back to Heatmap');
+  assert.match(body, /<div class="dg-heatmap-title">Fin<\/div>/, 'typed heatmap title stays verbatim');
+  assert.match(body, /aria-label="40%"/, 'whitespace progress label leaves a bare percent figure');
+  assert.match(body, /aria-label="Used: 40%"/, 'whitespace progress label falls back to the title');
+  assert.match(body, /aria-label="Deploy"/, 'typed terminal title stays');
+  assert.match(body, /dg-terminal-line--cmd">\$ run<\/span>/, 'typed terminal prompt stays');
+  assert.match(body, /dg-terminal-line--cmd">\$ ls<\/span>/, 'whitespace terminal prompt falls back to the $ default');
+  assert.match(body, /<nav class="dg-breadcrumbs" aria-label="Breadcrumb">/, 'whitespace breadcrumbs label falls back to Breadcrumb');
+  assert.match(body, /<nav class="dg-breadcrumbs" aria-label="Path">/, 'typed breadcrumbs label stays');
+});
+
 test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
   // components.js renderStat: a delta string Number() can't parse and a
   // non-numeric progress value are silently dropped, progress is clamped into
