@@ -6041,6 +6041,58 @@ test('table object rows render union-of-keys header and cells', () => {
   );
 });
 
+test('table null/undefined cells render empty, never literal "null"/"undefined" text', () => {
+  // The project null->empty convention (list items, grid cells) extends to
+  // tables: a missing object key and an explicit null/undefined value both map
+  // to an empty cell instead of leaking the 4-to-9-letter literal word as cell
+  // text. Both table data shapes are covered: object rows (union-of-keys) and
+  // array-of-arrays bodies (String() coercion path).
+  const objectRows = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{
+        type: 'table',
+        rows: [
+          { name: 'api', v: 2 },
+          { name: 'db' }, // missing key
+          { name: 'auth', v: null }, // explicit null
+          { name: 'mysql', v: undefined }, // explicit undefined
+          { name: 'redis', v: '' }, // empty string stays empty
+        ],
+      }],
+    }],
+  });
+  assert.match(
+    objectRows,
+    /<tbody><tr><td>api<\/td><td>2<\/td><\/tr><tr><td>db<\/td><td><\/td><\/tr><tr><td>auth<\/td><td><\/td><\/tr><tr><td>mysql<\/td><td><\/td><\/tr><tr><td>redis<\/td><td><\/td><\/tr><\/tbody>/,
+    'sparse object rows render empty cells for missing/null/undefined values'
+  );
+  assert.ok(!/>null</.test(objectRows), 'no literal "null" leaks into a table cell');
+  assert.ok(!/>undefined</.test(objectRows), 'no literal "undefined" leaks into a table cell');
+
+  const arrayRows = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{
+        type: 'table',
+        header: false,
+        rows: [
+          ['api', 2],
+          ['db', null],
+          ['auth', undefined],
+        ],
+      }],
+    }],
+  });
+  assert.match(
+    arrayRows,
+    /<tbody><tr><th scope="row">api<\/th><td>2<\/td><\/tr><tr><th scope="row">db<\/th><td><\/td><\/tr><tr><th scope="row">auth<\/th><td><\/td><\/tr><\/tbody>/,
+    'array-of-arrays rows with null/undefined cells render empty cells'
+  );
+  assert.ok(!/>null</.test(arrayRows), 'array rows leak no literal "null" text');
+  assert.ok(!/>undefined</.test(arrayRows), 'array rows leak no literal "undefined" text');
+});
+
 test('empty or absent table rows render a no-data note instead of a hollow table', () => {
   // An empty rows list has no header and no body, so a bare <table> with an
   // empty <tbody> (or nothing at all) would be an invisible hollow element.
