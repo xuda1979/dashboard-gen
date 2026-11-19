@@ -1255,6 +1255,67 @@ test('chart start option treats nullish or blank values as absent, not a zero ba
   }
 });
 
+test('chart runtime treats absent category labels as no label, not literal text', () => {
+  // toPoints builds every p.label through toLabel, the label-side mirror of
+  // toNum: a nullish, blank, boolean, or non-finite category is no category.
+  // Without it, String(p.label) in the line axis and ESC(p.label) in the bar
+  // axis + <title> tooltip fabricated literal "null"/"undefined"/"true"/"NaN"
+  // ticks from rows whose source label was missing. Real labels — text or
+  // numeric years/timestamps — must survive untouched.
+  const run = (store, type) => {
+    const html = renderHtml({
+      title: 't',
+      sections: [{ content: [{ type: 'chart', kind: type, data: [['x', 1]] }] }],
+    });
+    const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+    const attrs = { 'data-chart-data': 'chart-0', 'data-chart-type': type, 'data-chart-title': 'T' };
+    const figure = {
+      getAttribute: (name) => (name in attrs ? attrs[name] : null),
+      innerHTML: '',
+    };
+    new Function('window', 'document', script)(
+      { __DG_DATA__: store },
+      { readyState: 'complete', querySelectorAll: () => [figure], addEventListener: () => {} }
+    );
+    return figure.innerHTML;
+  };
+
+  const mixed = { 'chart-0': [['A', 1], [null, 2], [undefined, 3], ['', 4], ['  ', 5], [true, 6], ['B', 7]] };
+  const line = run(mixed, 'line');
+  assert.ok(
+    !/>null<\/text>/.test(line) && !/>undefined<\/text>/.test(line) && !/>true<\/text>/.test(line) && !/>Infinity<\/text>/.test(line) && !/>NaN<\/text>/.test(line),
+    'no literal coerced tick text from absent labels'
+  );
+  assert.match(line, /class="dg-axis dg-axis-x"[^>]*>A<\/text>/);
+  assert.match(line, /class="dg-axis dg-axis-x"[^>]*>B<\/text>/);
+  assert.strictEqual((line.match(/dg-axis-x/g) || []).length, 7, 'absent labels still occupy their slot as empty ticks');
+
+  const bar = run(mixed, 'bar');
+  assert.ok(
+    !/<title>null /u.test(bar) && !/<title>undefined /u.test(bar) && !/<title>true /u.test(bar) && !/<title>Infinity /u.test(bar) && !/<title>NaN /u.test(bar),
+    'no literal coerced bar tooltip text from absent labels'
+  );
+  assert.match(bar, /class="dg-axis dg-axis-x"[^>]*>A<\/text>/);
+  assert.match(bar, /<title>A series1: 1<\/title>/);
+
+  // numeric labels (years, timestamps) are real categories and must survive
+  const numStore = { 'chart-0': [{ label: 2024, v: 1 }, { label: 2025, v: 2 }] };
+  const numLine = run(numStore, 'line');
+  assert.match(numLine, />2024<\/text>/);
+  assert.match(numLine, />2025<\/text>/);
+  // ...while non-finite numeric labels still degrade (object rows path)
+  const nfStore = { 'chart-0': [{ label: Infinity, v: 1 }, { label: 'Q1', v: 2 }] };
+  const nfLine = run(nfStore, 'line');
+  assert.ok(!/>Infinity<\/text>/.test(nfLine), 'Infinity label degrades to an empty tick');
+  assert.match(nfLine, />Q1<\/text>/);
+
+  // pie drops blanked labels entirely instead of naming a slice after the
+  // stringified absent value
+  const pie = run({ 'chart-0': [['Organic', 45], [true, 10], [null, 9]] }, 'pie');
+  assert.ok(pie.includes('>Organic<'), 'real pie slice name survives');
+  assert.ok(!pie.includes('>true<') && !pie.includes('>null<'), 'absent pie labels drop entirely');
+});
+
 test('unknown chart kind falls back to line with a Chart label', () => {
   // renderChart treats only line/bar/pie as valid; anything else (typo, future
   // kind) must degrade to the line shell so the figure still renders.
