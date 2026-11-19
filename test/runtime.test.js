@@ -813,6 +813,36 @@ test('runtime renders sub-1 bar values proportionally instead of under a unit do
   assert.ok(Math.max(...tickVals) <= 0.5, `top tick stays proportional to sub-1 data (got ${Math.max(...tickVals)})`);
 });
 
+test('runtime draws a mixed-sign line spanning the zero baseline right-way-up', () => {
+  // lineSvg derives both domain edges from the padded min/max of the data, so a
+  // series straddling zero (profit/loss, temperature deltas) must map the
+  // negative point below and the positive point above a visible zero crossing.
+  // The y-domain regression pins covered the single-sign shapes; the unit seed
+  // also skewed mixed-sign data, so the straddling shape needs its own pin: the
+  // whole polyline inside the plot, a spread across it, and no axis inversion.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: PnL\n        data:\n          - { label: A, series: { p: -20 } }\n          - { label: B, series: { p: 30 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'PnL' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'A', series: { p: -20 } }, { label: 'B', series: { p: 30 } }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(!/NaN|Infinity/.test(out), 'line chart leaks no NaN/Infinity');
+  const d = /<path class="dg-series" d="([^"]+)"/.exec(out);
+  assert.ok(d, 'line chart produced a series path');
+  const ys = d[1].match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+  assert.strictEqual(ys.length, 2, 'one point per row');
+  // Plot area is y 22..300 and the -20/30 axis spans roughly -25..35: both
+  // points must land inside it with a spread that fills the plot.
+  assert.ok(ys.every((y) => Number.isFinite(y) && y >= 22 && y <= 300), 'polyline stays inside the plot area');
+  assert.ok(Math.max(...ys) - Math.min(...ys) > 200, `mixed-sign line fills the plot span (spread ${(Math.max(...ys) - Math.min(...ys)).toFixed(1)}px)`);
+  assert.ok(ys[0] > ys[1], 'negative data maps below positive data: axis is not inverted');
+  const ticks = out.match(/<text class="dg-axis"(?! dg-axis-x)[^>]*>(-?[\d.]+)<\/text>/g) || [];
+  const tickVals = ticks.map((t) => Number(/-?[\d.]+(?=<\/text>)/.exec(t)[0]));
+  assert.ok(Math.min(...tickVals) < 0 && Math.max(...tickVals) > 0, 'axis spans the zero baseline (a negative and a positive tick)');
+});
+
 test('runtime draws one pie slice per series key in a single data row', () => {
   // README: pie accepts "a single row with a multi-key series: map (one slice
   // per series key)". The runtime must explode that one row into slices, not
