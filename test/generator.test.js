@@ -3957,6 +3957,34 @@ test('round-9: table header and body cells trim padding on emit and degrade whit
   assert.ok(!/<td>\s+</.test(body), 'no body cell renders literal padding');
 });
 
+test('round-9: kv and def-list keys fall back from a padding-only key to the typed label', () => {
+  // renderKv/renderDefList resolved the term as `normalizeText(item.key) ||
+  // normalizeText(item.label)` raw, so a whitespace-only key shadowed a typed
+  // label into an empty <dt> while its value still rendered. Whitespace is
+  // absent like blank: the fallback chain trims each candidate before the ||
+  // so a padding-only key yields to the typed label instead of blanking it.
+  const html = renderHtml({
+    title: 'r9-kv',
+    sections: [{
+      content: [
+        { type: 'kv', items: [
+          { key: '   ', label: 'ErrLabel', value: 'v1' },
+          { key: ' rt ', label: 'Second', value: 'v2' },
+        ] },
+        { type: 'def-list', items: [
+          { key: '   ', label: 'DefLabel', value: 'w1' },
+          { key: '   ', value: '   ' },
+        ] },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  assert.match(body, /<div class="dg-kv-row"><dt>ErrLabel<\/dt><dd>v1<\/dd><\/div>/, 'padding-only kv key falls back to the typed label');
+  assert.match(body, /<div class="dg-kv-row"><dt>rt<\/dt><dd>v2<\/dd><\/div>/, 'typed kv key trims and still beats the label');
+  assert.match(body, /<div class="dg-def-list-row"><dt>DefLabel<\/dt><dd>w1<\/dd><\/div>/, 'padding-only def-list key falls back to the typed label');
+  assert.ok(!/<dt><\/dt>/.test(body), 'no blank term is rendered where a label was provided');
+});
+
 test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
   // components.js renderStat: a delta string Number() can't parse and a
   // non-numeric progress value are silently dropped, progress is clamped into
