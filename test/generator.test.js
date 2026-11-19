@@ -1225,6 +1225,11 @@ test('chart start option treats nullish or blank values as absent, not a zero ba
     ['0', true],
     [10, true],
     ['2024-01-01', true],
+    // A boolean start is absent, not a baseline: String(true) === 'true' would
+    // otherwise ship a data-chart-start="true" that the runtime's Number() turns
+    // into NaN — a fabricated attribute carrying no usable baseline.
+    [true, false],
+    [false, false],
   ];
   for (const [start, expected] of cases) {
     const html = renderHtml({
@@ -2254,6 +2259,17 @@ test('sparkline drops nullish and blank entries instead of plotting fabricated z
     /<path class="dg-sparkline-line" d="M 0 ([\d.]+)L 50 ([\d.]+)L 100 ([\d.]+)"\/>/,
     'a real zero reading still plots as a point, only nullish/blank entries are absent'
   );
+  // A boolean is absent, not a reading: Number(true) === 1 would otherwise
+  // fabricate a fake low point. [3, true, 6] plots only the two real points.
+  const bool = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: [3, true, 6] }] }],
+  });
+  assert.match(
+    bool,
+    /<path class="dg-sparkline-line" d="M 0 ([\d.]+)L 100 ([\d.]+)"\/>/,
+    'a boolean entry drops like a nullish/blank one, no fabricated low dip'
+  );
 });
 
 test('status renders a service-health list with the state spelled as text', () => {
@@ -2439,6 +2455,19 @@ test('heatmap truncates or pads ragged rows, escapes text, and degrades away', (
   );
   const rowHeaders = (html.match(/<th scope="row">[^<]*<\/th>/g) || []);
   assert.deepEqual(rowHeaders, ['<th scope="row">row &lt;1&gt;</th>', '<th scope="row">row &lt;2&gt;</th>'], 'blank-label rows are skipped');
+  // A boolean cell is absent, not a low-intensity reading: Number(true) === 1
+  // would otherwise plot as a fabricated level-1 cell.
+  const bool = renderHtml({
+    title: 'heatmap',
+    sections: [{ content: [{ type: 'heatmap', title: 'Load', columns: ['a', 'b'], rows: [
+      { label: 'r', values: [true, 3] },
+    ] }] }],
+  });
+  assert.match(
+    bool,
+    /<th scope="row">r<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l0">·<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l5">3<\/td>/,
+    'a boolean cell renders the muted · while real values still plot at their intensity'
+  );
 });
 
 test('heatmap with no rows or columns renders nothing', () => {
@@ -2638,22 +2667,27 @@ test('progress and gauge treat nullish or blank values as absent, not zero', () 
       { type: 'progress', label: 'Gauge null', value: null },
       { type: 'progress', label: 'Gauge empty', value: '' },
       { type: 'progress', label: 'Gauge blank', value: '  ' },
+      { type: 'progress', label: 'Binary', value: true },
       { type: 'progress', label: 'Zero', value: 0 },
       { type: 'progress', label: 'Numeric string', value: '45' },
       { type: 'gauge', label: 'Gauge zero', value: 0 },
       { type: 'gauge', label: 'Null min', value: 5, min: null },
       { type: 'gauge', label: 'Null max', value: 5, max: null },
       { type: 'gauge', label: 'Blank max', value: 5, max: '  ' },
+      { type: 'gauge', label: 'True min', value: 5, min: true },
+      { type: 'gauge', label: 'False max', value: 5, max: false },
     ] }],
   });
   const body = html.slice(html.indexOf('<main'));
   const barRows = body.match(/<div class="dg-progress-value">([^<]*)<\/div>/g) || [];
-  assert.deepEqual(barRows, ['<div class="dg-progress-value">0%</div>', '<div class="dg-progress-value">45%</div>'], 'nullish/blank progress values render no bar while a real zero and numeric strings still do');
-  assert.strictEqual((body.match(/class="dg-figure dg-gauge"/g) || []).length, 4, 'nullish/blank gauge values render no gauge, only real values do');
+  assert.deepEqual(barRows, ['<div class="dg-progress-value">0%</div>', '<div class="dg-progress-value">45%</div>'], 'nullish/blank/boolean progress values render no bar while a real zero and numeric strings still do');
+  assert.strictEqual((body.match(/class="dg-figure dg-gauge"/g) || []).length, 6, 'nullish/blank/boolean gauge values render no gauge, only real values do');
   assert.match(body, /aria-label="Gauge zero: 0"/, 'a real zero value still renders as a gauge');
   assert.match(body, /aria-label="Null min: 5"/, 'a nullish min falls back to the default range');
   assert.match(body, /aria-label="Null max: 5"/, 'a nullish max falls back to the default range instead of killing the gauge');
   assert.match(body, /aria-label="Blank max: 5"/, 'a blank max falls back to the default range');
+  assert.match(body, /aria-label="True min: 5"/, 'a boolean min is absent like a nullish one and falls back to the default range');
+  assert.match(body, /aria-label="False max: 5"/, 'a boolean max is absent like a nullish one and falls back to the default range');
 });
 
 test('breadcrumbs render a labelled trail ending in the current page', () => {
@@ -3338,8 +3372,9 @@ test('stat progress strip treats nullish or blank values as absent, not a fabric
       content: [
         { type: 'stat', label: 'Blank', value: '1', progress: '' },
         { type: 'stat', label: 'Space', value: '2', progress: '   ' },
-        { type: 'stat', label: 'Zero', value: '3', progress: 0 },
-        { type: 'stat', label: 'Numeric', value: '4', progress: '25' },
+        { type: 'stat', label: 'Binary', value: '3', progress: true },
+        { type: 'stat', label: 'Zero', value: '4', progress: 0 },
+        { type: 'stat', label: 'Numeric', value: '5', progress: '25' },
       ],
     }],
   });
@@ -3348,7 +3383,7 @@ test('stat progress strip treats nullish or blank values as absent, not a fabric
   assert.deepEqual(strips, [
     'class="dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:0%"',
     'class="dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:25%"',
-  ], 'blank progress values render no strip; a real zero and numeric strings still do');
+  ], 'blank and boolean progress values render no strip; a real zero and numeric strings still do');
 });
 
 test('stat and stat-list drop blank-string deltas as absent, not a fabricated 0', () => {
@@ -6042,6 +6077,7 @@ test('grid blank or non-positive columns falls back to the fluid auto-fill layou
       grid('2.5'),
       grid('abc'),
       grid(false),
+      grid(true),
       grid(3),
       grid(4),
     ] }],
@@ -6060,15 +6096,18 @@ test('grid blank or non-positive columns falls back to the fluid auto-fill layou
     'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
     'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
     'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
     'grid-template-columns: repeat(3, minmax(0, 1fr));',
     'grid-template-columns: repeat(4, minmax(0, 1fr));',
   ], 'blank, null, non-positive, fractional, and garbage counts degrade to the fluid auto-fill layout');
-  assert.ok(!/repeat\(2\.5|repeat\(-|repeat\(0,|repeat\(NaN/.test(body),
+  assert.ok(!/repeat\(2\.5|repeat\(-|repeat\(0,|repeat\(NaN|repeat\(true|repeat\(false/.test(body),
     'no invalid or malformed repeat count leaks into the layout');
   const colsAttrs = body.match(/data-grid-cols="[^"]+"/g) || [];
-  assert.strictEqual(colsAttrs.length, 13, 'every grid still carries the data-grid-cols hook');
+  assert.strictEqual(colsAttrs.length, 14, 'every grid still carries the data-grid-cols hook');
   assert.ok(!['0', '-2', '2.5', 'NaN'].some((bad) => body.includes(`data-grid-cols="${bad}"`)),
     'no malformed column count leaks into the data-grid-cols attribute');
+  assert.ok(!/repeat\((?:true|false),/.test(body), 'no boolean columns value leaks into any repeat count');
+  assert.ok(!/data-grid-cols="1"/.test(body), 'a boolean columns never fabricates a fixed 1-column grid hook');
 });
 
 test('quote component renders text with optional cite footer', () => {

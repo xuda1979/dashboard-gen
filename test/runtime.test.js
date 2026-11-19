@@ -1446,6 +1446,40 @@ test('runtime skips nullish and blank chart cells as no reading, not zero', () =
   });
   assert.strictEqual(lineCommands(figureEls[0].innerHTML), 2, 'nested series rows: the blank cell is skipped');
 
+  // flat object rows with boolean cells: a boolean is absent, not a reading —
+  // Number(true) === 1 would otherwise fabricate a fake point on the path
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'BoolFlat' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Mon', v: 10 }, { label: 'Tue', v: true }, { label: 'Wed', v: 20 },
+    ],
+  });
+  assert.strictEqual(lineCommands(figureEls[0].innerHTML), 2, 'flat object rows: the boolean cell is skipped like a nullish one');
+
+  // headerless array rows: a boolean cell drops, not a fabricated 1
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'BoolArr' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [['Mon', 10], ['Tue', false], ['Wed', 20]],
+  });
+  assert.strictEqual(lineCommands(figureEls[0].innerHTML), 2, 'headerless array: the false cell is not a zero-coerced point');
+
+  // a series whose cells are all boolean degrades to the no-data note
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'BoolAll' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Mon', series: { v: true } },
+      { label: 'Tue', series: { v: false } },
+    ],
+  });
+  assert.ok(figureEls[0].innerHTML.includes('class="dg-note"'), 'all-boolean line degrades to the no-data note');
+  assert.ok(!figureEls[0].innerHTML.includes('<svg'), 'no hollow svg shell for an all-boolean series');
+
   // a real zero is still a reading
   ({ dom, figureEls } = makeDom([
     { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Zero' },
