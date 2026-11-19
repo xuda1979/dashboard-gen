@@ -3964,6 +3964,75 @@ test('boolean/blank/non-finite label slots fall back to the default landmark nam
     'no literal boolean/non-finite text leaks into any aria-label');
 });
 
+test('boolean/blank/non-finite title and caption slots degrade away, never fabricate empty wrappers or labels', () => {
+  // components.js renderCard/renderGrid/renderStatList/renderTable/renderGauge/
+  // renderImage/renderStatus/renderTimeline: a truthy boolean or non-finite
+  // number in a `title`/`caption` slot passed the pre-coercion `c.title ?` /
+  // `c.caption ?` checks but normalized to '', so the renderers fabricated
+  // empty wrappers (`<div class="dg-status-title"></div>`, empty card titles
+  // and figure captions, `<p class="dg-note dg-gauge-cap"></p>`) and empty
+  // `aria-label=""` attributes. A raw boolean/blank/non-finite value in a
+  // title/caption slot is absent like a nullish one: guard on the normalized
+  // text so the wrapper/attribute is omitted entirely, while a typed string
+  // still renders the wrapper and stays verbatim.
+  const fileDir = ExampleTmp();
+  fs.writeFileSync(
+    path.join(fileDir, 'pic.svg'),
+    '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"><rect width="1" height="1" fill="#0ea5e9"/></svg>'
+  );
+  const html = renderHtml(
+    {
+      title: 'cap-slot-absent',
+      sections: [{
+        content: [
+          { type: 'status', title: true, items: [{ name: 'API', state: 'ok' }] },
+          { type: 'status', title: '  ', items: [{ name: 'DB', state: 'down' }] },
+          { type: 'timeline', title: true, items: [{ text: 'x', time: '09:00' }] },
+          { type: 'stat-list', caption: true, items: [{ label: 'L', value: 1 }] },
+          { type: 'table', caption: true, rows: [['a', 'b']] },
+          { type: 'gauge', caption: true, value: 42 },
+          { type: 'card', title: true, text: 'bool-card' },
+          { type: 'card', title: NaN, text: 'nan-card' },
+          { type: 'card', title: { text: 'real-title' }, text: 'obj-card' },
+          { type: 'grid', columns: 2, items: [{ title: true, text: 'gx-cell' }] },
+          { type: 'image', caption: true, file: 'pic.svg' },
+          { type: 'image', caption: 'real-cap', file: 'pic.svg' },
+          { type: 'status', title: 'Real status', items: [{ name: 'A', state: 'ok' }] },
+          { type: 'table', caption: 'Real table', rows: [['x', 'y']] },
+        ],
+      }],
+    },
+    { fileDir }
+  );
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  assert.ok(!/aria-label=""/.test(body),
+    'no empty aria-label is fabricated from a truthy boolean/blank/non-finite caption');
+  assert.ok(!/<div class="dg-status-title"><\/div>/.test(body),
+    'a boolean/blank status title degrades away instead of an empty status-title div');
+  assert.ok(!/<div class="dg-timeline-title"><\/div>/.test(body),
+    'a boolean timeline title degrades away instead of an empty timeline-title div');
+  assert.ok(!/<h3 class="dg-card-title"><\/h3>/.test(body),
+    'a boolean/non-finite card title degrades away instead of an empty card-title h3');
+  assert.ok(!/<p class="dg-note dg-gauge-cap"><\/p>/.test(body),
+    'a boolean gauge caption degrades away instead of an empty gauge-cap paragraph');
+  assert.ok(!/<figcaption class="dg-image-caption"><\/figcaption>/.test(body),
+    'a boolean image caption degrades away instead of an empty image-caption figcaption');
+  assert.match(body, /<div class="dg-status"><ul class="dg-status-list">/,
+    'a status with a degraded title still renders its list, just without the title block');
+  assert.ok(!/class="dg-statlist" aria-label=""|class="dg-table" aria-label=""/.test(body),
+    'stat-list/table boolean captions omit the aria-label instead of emitting aria-label=""');
+  assert.match(body, /<div class="dg-cell"><div class="dg-card">gx-cell<\/div><\/div>/,
+    'the grid cell text still renders after its boolean title is degraded');
+  assert.match(body, /<figcaption class="dg-image-caption">real-cap<\/figcaption>/,
+    'a typed image caption stays verbatim');
+  assert.match(body, /<div class="dg-status-title">Real status<\/div>/,
+    'a typed status title still renders its wrapper');
+  assert.match(body, /<table class="dg-table" aria-label="Real table">/,
+    'a typed table caption still renders its aria-label');
+  assert.match(body, /<h3 class="dg-card-title">real-title<\/h3>/,
+    'a card title object form still renders its text');
+});
+
 test('stat falls back to title label and to a bare stat aria-label', () => {
   // components.js renderStat: the figure label is `c.label || c.title || ''`.
   // A stat given only a `title:` uses it as the label, and one with neither
