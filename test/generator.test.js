@@ -2588,6 +2588,42 @@ test('gauge falls back to title for its label and accessible name', () => {
   assert.match(html, /<div class="dg-gauge-title">Disk<\/div>/, 'title fills the gauge title slot');
 });
 
+test('progress and gauge treat nullish or blank values as absent, not zero', () => {
+  // components.js renderProgress/renderGauge: Number(null) === 0 and
+  // Number('') === 0 once fabricated a zero bar / zero readout for a value
+  // that was missing or blank in the source data — the same coercion class
+  // sparklineValues and the stat strip already drop. A nullish or blank
+  // value is absent: it degrades away exactly like a missing value. A real
+  // zero still renders, numeric strings still coerce, and a nullish or blank
+  // min/max falls back to the 0/100 defaults instead of corrupting or
+  // killing the range.
+  const html = renderHtml({
+    title: 'empty-values',
+    sections: [{ content: [
+      { type: 'progress', label: 'Null', value: null },
+      { type: 'progress', label: 'Empty', value: '' },
+      { type: 'progress', label: 'Blank', value: '   ' },
+      { type: 'progress', label: 'Gauge null', value: null },
+      { type: 'progress', label: 'Gauge empty', value: '' },
+      { type: 'progress', label: 'Gauge blank', value: '  ' },
+      { type: 'progress', label: 'Zero', value: 0 },
+      { type: 'progress', label: 'Numeric string', value: '45' },
+      { type: 'gauge', label: 'Gauge zero', value: 0 },
+      { type: 'gauge', label: 'Null min', value: 5, min: null },
+      { type: 'gauge', label: 'Null max', value: 5, max: null },
+      { type: 'gauge', label: 'Blank max', value: 5, max: '  ' },
+    ] }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  const barRows = body.match(/<div class="dg-progress-value">([^<]*)<\/div>/g) || [];
+  assert.deepEqual(barRows, ['<div class="dg-progress-value">0%</div>', '<div class="dg-progress-value">45%</div>'], 'nullish/blank progress values render no bar while a real zero and numeric strings still do');
+  assert.strictEqual((body.match(/class="dg-figure dg-gauge"/g) || []).length, 4, 'nullish/blank gauge values render no gauge, only real values do');
+  assert.match(body, /aria-label="Gauge zero: 0"/, 'a real zero value still renders as a gauge');
+  assert.match(body, /aria-label="Null min: 5"/, 'a nullish min falls back to the default range');
+  assert.match(body, /aria-label="Null max: 5"/, 'a nullish max falls back to the default range instead of killing the gauge');
+  assert.match(body, /aria-label="Blank max: 5"/, 'a blank max falls back to the default range');
+});
+
 test('breadcrumbs render a labelled trail ending in the current page', () => {
   const html = renderHtml({
     title: 'breadcrumbs',
@@ -3257,6 +3293,30 @@ test('stat drops non-numeric delta/progress and clamps progress to 0-100', () =>
   assert.match(body, /dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:100%"/, 'progress clamps above 100');
   assert.match(body, /dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:0%"/, 'progress clamps below 0');
   assert.ok(!/dg-stat-progress-fill--glow/.test(body), 'unknown progressTone falls back to primary');
+});
+
+test('stat progress strip treats nullish or blank values as absent, not a fabricated 0%', () => {
+  // components.js renderStat: the progress strip guard dropped null but let
+  // '' and '   ' through, where Number('') === 0 passed the isFinite check
+  // and fabricated a 0% strip. Blank progress is absent, matching null; a
+  // real zero still warrants a 0% strip.
+  const html = renderHtml({
+    title: 'stats',
+    sections: [{
+      content: [
+        { type: 'stat', label: 'Blank', value: '1', progress: '' },
+        { type: 'stat', label: 'Space', value: '2', progress: '   ' },
+        { type: 'stat', label: 'Zero', value: '3', progress: 0 },
+        { type: 'stat', label: 'Numeric', value: '4', progress: '25' },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  const strips = body.match(/class="dg-stat-progress-fill[^"]*" style="width:([\d.]+)%"/g) || [];
+  assert.deepEqual(strips, [
+    'class="dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:0%"',
+    'class="dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:25%"',
+  ], 'blank progress values render no strip; a real zero and numeric strings still do');
 });
 
 test('stat falls back to title label and to a bare stat aria-label', () => {
