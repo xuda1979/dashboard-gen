@@ -919,6 +919,45 @@ test('runtime draws one pie slice per series key in a single data row', () => {
   assert.ok(out.includes('Organic 60.0%') && out.includes('Paid 40.0%'), 'slice labels use the series keys with computed shares');
 });
 
+test('runtime sources a row-form pie slice from the first series key only', () => {
+  // The one-slice-per-key explosion applies to a single row with a multi-key
+  // map; when several rows carry multi-key maps the runtime is row-per-slice,
+  // so each row contributes one slice valued from its FIRST key and later keys
+  // are ignored — they are not extra slices and cannot rescue a row whose
+  // first key is non-numeric (coerced to 0 and filtered).
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: pie\n        title: Rows\n        data:\n          - { label: Organic, series: { a: 60, b: 900 } }\n          - { label: Paid, series: { a: 40, b: 5 } }\n      - type: chart\n        kind: pie\n        title: Mixed\n        data:\n          - { label: A, series: { x: 10, y: 3 } }\n          - { label: B, series: { x: nope, y: 5 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'Rows' },
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-1', 'data-chart-title': 'Mixed' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Organic', series: { a: 60, b: 900 } },
+      { label: 'Paid', series: { a: 40, b: 5 } },
+    ],
+    'chart-1': [
+      { label: 'A', series: { x: 10, y: 3 } },
+      { label: 'B', series: { x: 'nope', y: 5 } },
+    ],
+  });
+  const rowsOut = figureEls[0].innerHTML;
+  assert.strictEqual((rowsOut.match(/class="dg-slice"/g) || []).length, 2, 'one slice per row, not one per series key');
+  assert.ok(rowsOut.includes('Organic 60.0%') && rowsOut.includes('Paid 40.0%'), 'slice values come from the first key of each row');
+  assert.ok(rowsOut.includes('<title>Organic: 60 (60.0%)</title>') && rowsOut.includes('<title>Paid: 40 (40.0%)</title>'), 'slice titles use first-key values');
+  assert.ok(rowsOut.includes('>Organic</span>') && rowsOut.includes('>Paid</span>'), 'legend names both rows');
+  assert.ok(!rowsOut.includes('>b</span>') && !rowsOut.includes('900'), 'second-key data is not a slice source and never appears');
+  const mixedOut = figureEls[1].innerHTML;
+  assert.strictEqual((mixedOut.match(/class="dg-slice"/g) || []).length, 1, 'a null first-key coerces to 0 and the row is filtered out');
+  assert.ok(mixedOut.includes('A 100.0%'), 'the surviving row keeps the full share');
+  assert.ok(mixedOut.includes('<title>A: 10 (100.0%)</title>'), 'surviving slice title spells value and share');
+  assert.ok(!mixedOut.includes('>B</span>') && !mixedOut.includes('nope'), 'the dropped row leaves no slice or legend entry');
+  assert.ok(!rowsOut.includes('NaN') && !mixedOut.includes('NaN'), 'no NaN leaks into either pie');
+});
+
 test('runtime draws a single-value pie as a visible full circle', () => {
   // A slice with 100% of the total spans the whole circle: an SVG path whose
   // arc runs from a point back to the same point collapses to two coincident
