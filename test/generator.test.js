@@ -3433,7 +3433,10 @@ test('stat progress strip treats nullish or blank values as absent, not a fabric
   // components.js renderStat: the progress strip guard dropped null but let
   // '' and '   ' through, where Number('') === 0 passed the isFinite check
   // and fabricated a 0% strip. Blank progress is absent, matching null; a
-  // real zero still warrants a 0% strip.
+  // real zero still warrants a 0% strip. A non-finite progress value is
+  // absent too: isNaN(Infinity) === false lets Infinity past an isNaN-style
+  // guard, but the strip gates on Number.isFinite, so Infinity/-Infinity/NaN
+  // render no bar at all.
   const html = renderHtml({
     title: 'stats',
     sections: [{
@@ -3441,8 +3444,11 @@ test('stat progress strip treats nullish or blank values as absent, not a fabric
         { type: 'stat', label: 'Blank', value: '1', progress: '' },
         { type: 'stat', label: 'Space', value: '2', progress: '   ' },
         { type: 'stat', label: 'Binary', value: '3', progress: true },
-        { type: 'stat', label: 'Zero', value: '4', progress: 0 },
-        { type: 'stat', label: 'Numeric', value: '5', progress: '25' },
+        { type: 'stat', label: 'Inf value', value: '4', progress: Infinity },
+        { type: 'stat', label: 'Neath value', value: '5', progress: -Infinity },
+        { type: 'stat', label: 'Nan value', value: '6', progress: NaN },
+        { type: 'stat', label: 'Zero', value: '7', progress: 0 },
+        { type: 'stat', label: 'Numeric', value: '8', progress: '25' },
       ],
     }],
   });
@@ -3451,7 +3457,7 @@ test('stat progress strip treats nullish or blank values as absent, not a fabric
   assert.deepEqual(strips, [
     'class="dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:0%"',
     'class="dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:25%"',
-  ], 'blank and boolean progress values render no strip; a real zero and numeric strings still do');
+  ], 'blank, boolean and non-finite progress values render no strip; a real zero and numeric strings still do');
 });
 
 test('stat and stat-list drop blank-string deltas as absent, not a fabricated 0', () => {
