@@ -1489,6 +1489,31 @@ test('round-12: stat accessible name drops blank figure segments instead of a st
   assert.match(html, /role="img" aria-label="Y"/, 'a blank figure with a real label still names the stat');
 });
 
+test('round-13: a stat with no surviving segment degrades away instead of an empty img-shell', () => {
+  // With every figure slot absent (blank label, non-finite value, non-finite
+  // delta, blank prefix/suffix, no progress), the old wrapper unconditionally
+  // emitted <div class="dg-stat" role="img" aria-label=""> with empty
+  // value/label divs — a dead shell that names nothing. Gauge and progress
+  // degrade away entirely when their figure is absent, so stat now does the
+  // same; the round-12 shapes (blank figure + real label/delta/progress) still
+  // render because a nameable segment survives.
+  const html = renderHtml({ title: 'r13', sections: [{ content: [
+    { type: 'stat', label: '   ', value: NaN, delta: { value: Infinity }, prefix: '   ', suffix: '   ' },
+    { type: 'stat', value: '   ', delta: 3 },
+    { type: 'stat', label: 'Y', value: '   ' },
+    { type: 'stat', label: 'X', value: 5 },
+  ] }] });
+  const main = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  // Content order is preserved, so 4 stats in, 3 shells out — the all-absent
+  // one leaves no trace. (A doesNotMatch on /dg-stat/ would also fire on the
+  // legitimate survivor shells below, so count the shells instead.)
+  assert.equal((main.match(/<div class="dg-stat"/g) || []).length, 3,
+    'an all-absent stat emits no dead role="img" shell');
+  assert.match(main, /role="img" aria-label="▲ 3"/, 'a surviving delta still renders the stat');
+  assert.match(main, /role="img" aria-label="Y"/, 'a surviving label still renders the stat');
+  assert.match(main, /role="img" aria-label="X: 5"/, 'a surviving figure plus label still renders the stat');
+});
+
 test('user content is HTML-escaped in text and attributes', () => {
   // All component text goes through esc()/attr(); a <script> payload must never
   // survive into markup as a raw tag, and `"` in an attribute value must not be
