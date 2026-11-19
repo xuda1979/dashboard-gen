@@ -6153,9 +6153,12 @@ test('grid non-numeric scalar columnWidth falls back to the 220px default', () =
   // finite, so booleans used to pass the isFinite guard and fabricate the
   // invalid "minmax(truepx, 1fr)" / "minmax(falsepx, 1fr)" minimum — and a
   // bare word like "abc", being truthy, fell to the raw-string branch and
-  // leaked the unit-less "minmax(abc, 1fr)". Only a real non-negative length
-  // (number, numeric string, or unit-suffixed string) can size an auto-fill
-  // track; non-numeric or negative scalars are absent like a missing width.
+  // leaked the unit-less "minmax(abc, 1fr)". Infinity/-Infinity/NaN are
+  // numbers too, so they clear the typeof gate but fail isFinite and must
+  // degrade like a missing width rather than fabricate "minmax(Infinitypx, 1fr)".
+  // Only a real non-negative length (number, numeric string, or unit-suffixed
+  // string) can size an auto-fill track; non-numeric or negative scalars are
+  // absent like a missing width.
   const grid = (columnWidth) => ({
     type: 'grid',
     ...(columnWidth === undefined ? {} : { columnWidth }),
@@ -6167,6 +6170,9 @@ test('grid non-numeric scalar columnWidth falls back to the 220px default', () =
       grid(true),
       grid(false),
       grid('abc'),
+      grid(Infinity),
+      grid(-Infinity),
+      grid(NaN),
       grid(-40),
       grid('-40'),
       grid(220),
@@ -6186,12 +6192,15 @@ test('grid non-numeric scalar columnWidth falls back to the 220px default', () =
     'minmax(220px, 1fr)',
     'minmax(220px, 1fr)',
     'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
+    'minmax(220px, 1fr)',
     'minmax(18rem, 1fr)',
     'minmax(50%, 1fr)',
     'minmax(220px, 1fr)',
-  ], 'booleans, bare words, and negative widths degrade to 220px while numeric and unit-suffixed lengths survive');
-  assert.ok(!/minmax\((true|false)px|minmax\([a-z]+, 1fr\)|minmax\(-\d+px, 1fr\)/.test(body),
-    'no boolean, unit-less, or negative minmax minimum leaks into the layout');
+  ], 'booleans, bare words, negative and non-finite widths degrade to 220px while numeric and unit-suffixed lengths survive');
+  assert.ok(!/minmax\((true|false)px|minmax\([a-z]+, 1fr\)|minmax\(-\d+px, 1fr\)|minmax\((Infinity|-Infinity|NaN)px/.test(body),
+    'no boolean, unit-less, negative, or non-finite minmax minimum leaks into the layout');
 });
 
 test('grid blank or non-positive columns falls back to the fluid auto-fill layout', () => {
