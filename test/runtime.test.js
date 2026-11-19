@@ -508,6 +508,36 @@ test('runtime draws headerless multi-column array rows as auto-named series', ()
   assert.ok(out.includes('series1') && out.includes('series2'), 'legend uses auto-derived series names');
 });
 
+test('runtime keeps a numeric-string first row in the body, not the header', () => {
+  // The array-of-arrays header heuristic accepts only non-numeric strings
+  // (typeof c === 'string' && isNaN(Number(c))). A quoted first row like
+  // ['2024', '42'] is all strings but every cell parses as a number, so it is
+  // a data row (period + value), not column titles: promoting it would drop
+  // the labels from the body and mislabel the years as series names. The
+  // runtime must keep both rows in the body, auto-name the value column
+  // series1, and draw one point per row right-way-up.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Growth\n        data:\n          - [\'2024\', \'42\']\n          - [\'2025\', \'48\']',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Growth' }]);
+  const embedded = extractData(html)['chart-0'];
+  assert.deepStrictEqual(embedded, [['2024', '42'], ['2025', '48']], 'store keeps the numeric strings as strings');
+  runRuntime(code, dom, { 'chart-0': embedded });
+  const out = figureEls[0].innerHTML;
+  const d = /<path class="dg-series" d="([^"]+)"/.exec(out);
+  assert.ok(d, 'line chart produced a series path');
+  const ys = d[1].match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+  assert.strictEqual(ys.length, 2, 'both rows drawn as data points, none promoted to header');
+  assert.ok(ys.every((yy) => yy >= 22 && yy <= 300), `both points map inside the plot area (got ${ys})`);
+  assert.ok(ys[0] > ys[1], '2024 (42) maps below 2025 (48): the smaller value is lower on an upright axis');
+  assert.ok(out.includes('>2024</text>') && out.includes('>2025</text>'), 'years are drawn as x-axis labels');
+  assert.ok(!out.includes('>2024</span>'), '"2024" is never treated as a series name');
+  assert.ok(out.includes('>series1</span>'), 'value column auto-named series1 in the legend');
+  assert.ok(!out.includes('NaN'), 'no NaN leaks into the chart');
+});
+
 test('runtime extracts fetch specs and attempts fetch for missing data', async () => {
   const src = fs.readFileSync(path.join(__dirname, '..', 'examples', 'fetch.yaml'), 'utf8');
   const html = buildFromSource(src, 'fetch.yaml', { fileDir: 'examples' });
