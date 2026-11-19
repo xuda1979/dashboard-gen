@@ -1169,6 +1169,19 @@ test('missing title falls back to Dashboard in the page head', () => {
   assert.match(html, /<title>Dashboard<\/title>/);
 });
 
+test('round-10: whitespace-only title and description degrade to the default and absent meta', () => {
+  // '   ' is truthy, so a raw `doc.title || 'Dashboard'` leaks literal padding
+  // into the page head. The title must fall back to Dashboard and a padding-only
+  // description must not emit a <meta name="description"> at all.
+  const html = renderHtml({ title: '   ', description: '   ', sections: [] });
+  assert.match(html, /<title>Dashboard<\/title>/, 'whitespace-only title falls back to the default');
+  assert.ok(!/<meta name="description">/.test(html), 'whitespace-only description emits no meta tag');
+
+  const padded = renderHtml({ title: '  My Dash  ', description: '  A real desc.  ', sections: [] });
+  assert.match(padded, /<title>My Dash<\/title>/, 'real title is trimmed on emit');
+  assert.match(padded, /<meta name="description" content="A real desc.">/, 'real description is trimmed on emit');
+});
+
 test('numeric grid columnWidth is treated as pixels', () => {
   const doc = {
     title: 't',
