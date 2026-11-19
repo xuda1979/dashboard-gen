@@ -3916,6 +3916,47 @@ test('round-8: steps/stepper/grid scalar cells trim padding on emit and degrade 
   assert.strictEqual((body.match(/<div class="dg-cell">\s*<\/div>/g) || []).length, 3, 'whitespace/null/false grid scalars degrade to empty cells');
 });
 
+test('round-9: table header and body cells trim padding on emit and degrade whitespace-only cells', () => {
+  // rowsToTableData coerced every typed cell straight to the DOM: the array
+  // branch (cell == null ? '' : String(cell)) and the object union-of-keys
+  // branch (v == null ? '' : v) both emitted String() verbatim, so a padded
+  // typed cell printed its literal padding and a whitespace-only cell printed
+  // a bare run of spaces. Whitespace is absent like blank: the cell trims on
+  // emit, so typed strings render edge-trimmed and whitespace-only cells
+  // degrade to empty — in the auto-detected header row and object keys alike.
+  const html = renderHtml({
+    title: 'r9',
+    sections: [{ content: [
+      { type: 'table', caption: 'c',
+        rows: [
+          ['  r1c1  ', '   ', '  r1c3  '],
+          [42, '   ', '  plain  '],
+        ] },
+      { type: 'table',
+        rows: [
+          { '  key1  ': '  v1  ', '   ': '   ', alpha: '  a  ' },
+        ] },
+    ] }],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  // Auto-detected header (first row) trims like data cells.
+  assert.match(body, /<th scope="col">r1c1<\/th>/, 'padded array header cell trims on emit');
+  assert.match(body, /<th scope="col">r1c3<\/th>/, 'second padded array header cell trims on emit');
+  assert.match(body, /<td>42<\/td>/, 'numeric body cell stays verbatim');
+  assert.match(body, /<td>plain<\/td>/, 'padded body cell trims on emit');
+  // Object-form keys become the header and values the body cells.
+  assert.match(body, /<th scope="col">key1<\/th>/, 'padded object key trims on the header');
+  assert.match(body, /<th scope="col">alpha<\/th>/, 'typed object key stays verbatim');
+  assert.match(body, /<td>v1<\/td>/, 'padded object value trims on emit');
+  assert.match(body, /<td>a<\/td>/, 'second padded object value trims on emit');
+  // Whitespace-only cells degrade to empty in every position (header and body,
+  // array and object form).
+  assert.strictEqual((body.match(/<th scope="col"><\/th>/g) || []).length, 2, 'whitespace-only header cells degrade to empty (array row + object key)');
+  assert.strictEqual((body.match(/<td><\/td>/g) || []).length, 2, 'whitespace-only body cells degrade to empty (array row + object value)');
+  assert.ok(!/<th scope="col">\s+</.test(body), 'no header cell renders literal padding');
+  assert.ok(!/<td>\s+</.test(body), 'no body cell renders literal padding');
+});
+
 test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
   // components.js renderStat: a delta string Number() can't parse and a
   // non-numeric progress value are silently dropped, progress is clamped into
