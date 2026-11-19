@@ -2470,6 +2470,42 @@ test('heatmap truncates or pads ragged rows, escapes text, and degrades away', (
   );
 });
 
+test('heatmap renders non-finite and non-numeric cells as muted dots, not fabricated intensity', () => {
+  // components.js renderHeatmap: cells coerce through Number(v) with a
+  // Number.isFinite gate, so Infinity/-Infinity/NaN (all "finite-shaped" to
+  // isNaN — isNaN(Infinity) === false) and non-numeric strings cannot
+  // fabricate an intensity level; they render the same muted · as a missing
+  // cell while numeric strings still plot. The grid must keep every column,
+  // so a malformed cell degrades to zero intensity instead of dropping.
+  const html = renderHtml({
+    title: 'heatmap',
+    sections: [{ content: [{
+      type: 'heatmap',
+      title: 'Load',
+      columns: ['a', 'b', 'c'],
+      rows: [
+        { label: 'r1', values: [Infinity, 2, NaN] },
+        { label: 'r2', values: [-Infinity, '12', 'four'] },
+      ],
+    }] }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  // Scope the no-literal-leak check to the heatmap table; the page's embedded
+  // runtime script legitimately spells Infinity/NaN in its source comments.
+  const table = body.slice(body.indexOf('class="dg-heatmap-table"'), body.indexOf('class="dg-heatmap-legend"'));
+  assert.match(
+    body,
+    /<th scope="row">r1<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l0">·<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l5">2<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l0">·<\/td>/,
+    'Infinity and NaN cells render the muted · while a real value still plots'
+  );
+  assert.match(
+    body,
+    /<th scope="row">r2<\/th><td class="dg-heatmap-cell dg-heatmap-cell--l0">·<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l5">12<\/td><td class="dg-heatmap-cell dg-heatmap-cell--l0">·<\/td>/,
+    '-Infinity and non-numeric cells render the muted ·; a numeric string coerces and plots'
+  );
+  assert.ok(!/Infinity|NaN/.test(table), 'no literal non-finite text leaks into the heatmap table');
+});
+
 test('heatmap with no rows or columns renders nothing', () => {
   for (const c of [
     { type: 'heatmap' },
