@@ -1451,6 +1451,44 @@ test('button style, card intent, badge tone variants render their classes', () =
   assert.match(html, /class="dg-badge dg-badge--danger">d</);
 });
 
+test('round-11: button and link hrefs trim padding and whitespace-only hrefs degrade', () => {
+  // href="   " is truthy, so raw guards emitted a dead anchor full of literal
+  // spaces. A padded href is trimmed like every other text slot; a whitespace-
+  // only href is absent like a missing one — the button degrades to a plain
+  // <button> and the link falls back to the documented '#' default.
+  const html = renderHtml({ title: 'r11', sections: [{ content: [
+    { type: 'button', text: 'B1', href: '   ' },
+    { type: 'button', text: 'B2', href: ' /docs ' },
+    { type: 'button', text: 'B3', href: 0 },
+    { type: 'link', text: 'L1', href: '   ' },
+    { type: 'link', text: 'L2', href: '/path' },
+  ] }] });
+  assert.match(html, /<button type="button" class="dg-btn dg-btn--primary">B1<\/button>/, 'whitespace-only button href degrades to a plain button');
+  assert.match(html, /<a href="\/docs" class="dg-btn/, 'padded button href is trimmed');
+  assert.match(html, /<a href="0" class="dg-btn/, 'typed numeric 0 href passes through');
+  assert.match(html, /<a href="#" class="dg-link">L1<\/a>/, 'whitespace-only link href falls back to the # default');
+  assert.match(html, /<a href="\/path" class="dg-link">L2<\/a>/, 'real link href passes through');
+});
+
+test('round-12: stat accessible name drops blank figure segments instead of a stale comma join', () => {
+  // The role="img" wrapper spells label, figure, delta and progress in one
+  // aria-label. When the figure degrades away (blank value) but a delta or
+  // progress bar survives, the old nameParts.join(', ') leak a leading ', '
+  // (and a stale 'label: ' prefix when the figure was omitted); a blank
+  // figure with a real label still names the stat so assistive tech hears
+  // what the block is, not a bare comma list.
+  const html = renderHtml({ title: 'r12', sections: [{ content: [
+    { type: 'stat', value: '   ', delta: 3 },
+    { type: 'stat', label: 'X', value: '   ', delta: 3 },
+    { type: 'stat', value: '   ', progress: 50 },
+    { type: 'stat', label: 'Y', value: '   ' },
+  ] }] });
+  assert.match(html, /role="img" aria-label="▲ 3"/, 'blank figure with a delta drops the leading comma padding');
+  assert.match(html, /role="img" aria-label="X, ▲ 3"/, 'blank figure keeps the real label and drops the stale ": " prefix');
+  assert.match(html, /role="img" aria-label="50%"/, 'blank figure with a progress bar drops the leading comma padding');
+  assert.match(html, /role="img" aria-label="Y"/, 'a blank figure with a real label still names the stat');
+});
+
 test('user content is HTML-escaped in text and attributes', () => {
   // All component text goes through esc()/attr(); a <script> payload must never
   // survive into markup as a raw tag, and `"` in an attribute value must not be
@@ -4218,9 +4256,9 @@ test('stat and stat-list treat non-finite numeric values as absent, not literal 
     }],
   });
   const body = html.slice(html.indexOf('<main'));
-  assert.match(body, /dg-stat" role="img" aria-label="Inf: "/, 'Infinity value degrades like a missing one');
-  assert.match(body, /dg-stat" role="img" aria-label="Neath: "/, '-Infinity value degrades like a missing one');
-  assert.match(body, /dg-stat" role="img" aria-label="Nan: "/, 'NaN value degrades like a missing one');
+  assert.match(body, /dg-stat" role="img" aria-label="Inf"/, 'Infinity value degrades like a missing one');
+  assert.match(body, /dg-stat" role="img" aria-label="Neath"/, '-Infinity value degrades like a missing one');
+  assert.match(body, /dg-stat" role="img" aria-label="Nan"/, 'NaN value degrades like a missing one');
   assert.match(body, /dg-stat" role="img" aria-label="TextInf: Infinity"/, 'a typed string "Infinity" stays verbatim');
   assert.match(body, /dg-stat" role="img" aria-label="Real: ~1.2k"/, 'display strings stay verbatim');
   assert.match(body, /dg-stat" role="img" aria-label="Num: 42"/, 'real numeric values still render');
@@ -4321,7 +4359,7 @@ test('text surfaces treat a raw boolean as absent, not literal text', () => {
     }],
   });
   const body = html.slice(html.indexOf('<main'));
-  assert.match(body, /class="dg-stat" role="img" aria-label="Flag: "/,
+  assert.match(body, /class="dg-stat" role="img" aria-label="Flag"/,
     'a boolean stat value degrades like a missing one, never a literal "true" figure');
   assert.deepEqual(
     body.match(/class="dg-statlist-row"><th scope="row">([^<]*)<\/th>/g) || [],
