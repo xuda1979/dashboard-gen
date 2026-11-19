@@ -1434,6 +1434,20 @@ test('steps escapes item text and guards against a missing items array', () => {
   assert.match(html, /<ol class="dg-steps"><\/ol>/, 'missing items yields an empty list container');
 });
 
+test('steps drops blank and nullish items so the numbering stays dense', () => {
+  const html = renderHtml({
+    title: 'runbook',
+    sections: [{ content: [
+      { type: 'steps', items: ['Assess blast radius.', ' ', null, '  ', 'Freeze deploys.'] },
+    ] }],
+  });
+  assert.match(
+    html,
+    /<ol class="dg-steps"><li class="dg-steps-item"><span class="dg-steps-num">1<\/span><span class="dg-steps-text">Assess blast radius\.<\/span><\/li><li class="dg-steps-item"><span class="dg-steps-num">2<\/span><span class="dg-steps-text">Freeze deploys\.<\/span><\/li><\/ol>/,
+    'whitespace and nullish items degrade away, leaving dense 1..n numbering'
+  );
+});
+
 test('kv component renders a definition list of key/value pairs', () => {
   const html = renderHtml({
     title: 'spec',
@@ -1471,6 +1485,30 @@ test('kv accepts label keys, escapes text, and guards against a missing items ar
   assert.match(html, /<dt>bare-string-item<\/dt><dd><\/dd>/, 'a plain string item becomes a term with an empty value');
   assert.match(html, /<dt><\/dt><dd>orphan value<\/dd>/, 'an object item with no key or label still renders its value');
   assert.match(html, /<dl class="dg-kv"><\/dl>/, 'missing items yields an empty definition list');
+});
+
+test('kv drops nullish and blank rows without fabricating literal text', () => {
+  // A bare null/undefined item used to reach String() and render a literal
+  // <dt>null</dt>/<dt>undefined</dt> term; blank key+value pairs also kept a
+  // dead row. Both degrade away like def-list, while the container and pairs
+  // with any real content survive.
+  const html = renderHtml({
+    title: 'spec',
+    sections: [{ content: [{ type: 'kv', items: [
+      { key: 'Service', value: 'billing-worker' },
+      null,
+      undefined,
+      { key: '  ', value: ' ' },
+      { label: 'Revision', value: 'f3a9c21' },
+    ] }] }],
+  });
+  assert.match(
+    html,
+    /<dl class="dg-kv"><div class="dg-kv-row"><dt>Service<\/dt><dd>billing-worker<\/dd><\/div><div class="dg-kv-row"><dt>Revision<\/dt><dd>f3a9c21<\/dd><\/div><\/dl>/,
+    'real pairs survive while nullish and blank rows drop'
+  );
+  assert.ok(!html.includes('<dt>null</dt>') && !html.includes('<dt>undefined</dt>'), 'no literal null/undefined term text');
+  assert.ok(!html.includes('dg-kv-row"><dt></dt><dd></dd>'), 'no dead row with blank key and value');
 });
 
 test('image component inlines an SVG file as a data URI with a labelled figure', () => {
@@ -3605,10 +3643,9 @@ test('bare-label surfaces treat non-finite numeric values as absent, not literal
   );
   const kvTerms = body.match(/class="dg-kv-row"><dt>([^<]*)<\/dt><dd>([^<]*)/g) || [];
   assert.deepEqual(kvTerms, [
-    'class="dg-kv-row"><dt></dt><dd>',
     'class="dg-kv-row"><dt>Infinity</dt><dd>',
     'class="dg-kv-row"><dt>Real</dt><dd>v',
-  ], 'kv bare Infinity key degrades to an empty term; the typed string stays');
+  ], 'kv bare Infinity drops the whole row (empty term value pair); the typed string stays');
   const defTerms = body.match(/class="dg-def-list-row"><dt>([^<]*)<\/dt><dd>([^<]*)/g) || [];
   assert.deepEqual(defTerms, [
     'class="dg-def-list-row"><dt>Infinity</dt><dd>',
@@ -6459,6 +6496,21 @@ test('callout component defaults to primary tone and stays bare without title', 
   assert.match(html, /<div class="dg-callout dg-callout--primary"><p class="dg-callout-body">Tip: pin deps\.<\/p><\/div>/);
   assert.ok(!html.includes('role="note"'), 'no note role without an accessible name');
   assert.ok(!html.includes('<div class="dg-callout-title">'), 'no title header when title is absent');
+});
+
+test('callout treats a whitespace-only title as absent and falls unknown tones back to primary', () => {
+  // A `title` of ' '/'  ' is truthy but blank: it must not fabricate a
+  // role="note" landmark with an empty accessible name or a dead header div.
+  // An unknown tone degrades to the primary accent, never an invalid class.
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [
+      { type: 'callout', title: '  ', text: 'Whitespace title is absent.' },
+      { type: 'callout', tone: 'bogus', title: 'Bad tone', text: 'Tone falls back.' },
+    ] }],
+  });
+  assert.match(html, /<div class="dg-callout dg-callout--primary"><p class="dg-callout-body">Whitespace title is absent\.<\/p><\/div>/, 'the whitespace-title callout is a bare div with no note role or header');
+  assert.match(html, /<div class="dg-callout dg-callout--primary" role="note" aria-label="Bad tone">/, 'an unknown tone falls back to primary while a real title keeps the note role');
 });
 
 test('callout component escapes body and title markup', () => {
