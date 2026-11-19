@@ -4471,6 +4471,43 @@ test('bin/dg entry point dispatches help and build as a subprocess', () => {
   );
 });
 
+test('npm pack ships only the runtime surface, never tests or workflows', () => {
+  // package.json narrows the published tarball with a `files` whitelist so a
+  // `dg` consumer downloads bin/ + lib/ + examples/ + licenses only. This
+  // pins the actual `npm pack` manifest: every runtime file must ship and the
+  // dev-only/private paths (test suites, CI workflows, scripts, spec) must
+  // not leak into the tarball.
+  const { execFileSync } = require('node:child_process');
+  const packageRoot = path.join(__dirname, '..');
+  const stdout = execFileSync('npm', ['pack', '--dry-run', '--json'], {
+    cwd: packageRoot,
+    encoding: 'utf8',
+  });
+  const [manifest] = JSON.parse(stdout);
+  assert.ok(Array.isArray(manifest.files), 'pack manifest lists files');
+  const paths = manifest.files.map((f) => f.path);
+
+  const required = [
+    'package.json',
+    'LICENSE',
+    'README.md',
+    'COMMERCIAL-LICENSE.md',
+    'bin/dg',
+    ...['a11y', 'build', 'cli', 'components', 'errors', 'loader', 'render', 'style', 'theme'].map((m) => `lib/${m}.js`),
+    ...['chart', 'dashboard', 'fetch', 'landing', 'table'].map((n) => `examples/${n}.yaml`),
+    'examples/market.json',
+    'examples/ops-console.svg',
+  ];
+  for (const entry of required) {
+    assert.ok(paths.includes(entry), `tarball ships ${entry}`);
+  }
+
+  for (const banned of ['SPEC.md', 'test/generator.test.js', '.github/workflows/pages.yml', 'scripts/', 'docs/']) {
+    assert.ok(!paths.some((p) => p === banned || p.startsWith(banned)), `tarball excludes ${banned}`);
+  }
+  assert.ok(!paths.some((p) => p.endsWith('.tgz')), 'no packed tarball inside the tarball');
+});
+
 test('dg new scaffolds a README runbook that names the template', () => {
   // A scaffolded repo ships only dg.dsl.yaml + package.json + a Pages workflow;
   // the README completes it with the build/serve/edit/deploy loop so a visitor

@@ -4,6 +4,12 @@
   "description": "Declarative landing-page / read-only dashboard generator from YAML/JSON DSL to a single static HTML/CSS/JS file.",
   "license": "AGPL-3.0-only",
   "type": "commonjs",
+  "files": [
+    "bin",
+    "lib",
+    "examples",
+    "COMMERCIAL-LICENSE.md"
+  ],
   "bin": {
     "dg": "bin/dg"
   },
