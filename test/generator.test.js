@@ -3499,6 +3499,29 @@ test('button icon adds an inline SVG and stat progressLabel overrides the aria l
   assert.match(html, /class="dg-stat-progress" aria-label="8%" role="img"/, 'progress defaults to N% when no label');
 });
 
+test('stat progressLabel falls back to N% when boolean/blank/(non-finite) instead of a stale empty label', () => {
+  // renderStat: a truthy-but-unusable progressLabel (raw boolean, blank
+  // padding, non-finite number) fabricates a stale aria-label=""/whitespace on
+  // the progress bar. It must degrade to the "N%" default like a missing
+  // label — typed strings stay verbatim.
+  const html = renderHtml({
+    title: 'plabels',
+    sections: [{
+      content: [
+        { type: 'stat', label: 't', value: '1', progress: 60, progressLabel: true },
+        { type: 'stat', label: 'w', value: '2', progress: 70, progressLabel: '   ' },
+        { type: 'stat', label: 'n', value: '3', progress: 80, progressLabel: NaN },
+        { type: 'stat', label: 'k', value: '4', progress: 90, progressLabel: 'Nearly full' },
+      ],
+    }],
+  });
+  assert.ok(!html.includes('aria-label=""'), 'no stale empty progress label is fabricated');
+  assert.match(html, /aria-label="60%"/, 'boolean progressLabel degrades to the N% default');
+  assert.match(html, /aria-label="70%"/, 'whitespace progressLabel degrades to the N% default');
+  assert.match(html, /aria-label="80%"/, 'non-finite progressLabel degrades to the N% default');
+  assert.match(html, /aria-label="Nearly full"/, 'typed progressLabel stays verbatim');
+});
+
 test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
   // components.js renderStat: a delta string Number() can't parse and a
   // non-numeric progress value are silently dropped, progress is clamped into
