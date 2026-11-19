@@ -3671,6 +3671,36 @@ test('round-5: whitespace-only slots in stat-list/heatmap/progress/terminal/brea
   assert.match(body, /<nav class="dg-breadcrumbs" aria-label="Path">/, 'typed breadcrumbs label stays');
 });
 
+test('round-6: whitespace-only text slots in badge/quote/callout degrade to empty, typed text stays verbatim', () => {
+  // The untrimmed text slots in renderBadge/renderQuote/renderCallout let a
+  // whitespace-only string through, fabricating stale `<span>   </span>`,
+  // `<p>   </p>` and `<p class="dg-callout-body">   </p>` wrappers that print
+  // literal padding. Whitespace is absent like blank: the slot must trim and
+  // degrade to an empty body, while typed strings (including internal spacing)
+  // stay verbatim.
+  const html = renderHtml({
+    title: 'ws6',
+    sections: [{ content: [
+      { type: 'badge', text: '   ', tone: 'success' },
+      { type: 'badge', text: ' active ', tone: 'success' },
+      { type: 'quote', text: '   ', cite: 'C' },
+      { type: 'quote', text: 'Ship early', cite: 'C' },
+      { type: 'callout', text: '   ', title: 'T' },
+      { type: 'callout', text: '  Tip: pin deps.  ', title: 'T' },
+    ]}],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  assert.ok(!/<span class="dg-badge dg-badge--success">\s+<\/span>/.test(body), 'whitespace badge renders empty, not padding');
+  assert.ok(!/<p>\s+<\/p>/.test(body), 'whitespace quote body renders empty, not padding');
+  assert.ok(!/<p class="dg-callout-body">\s+<\/p>/.test(body), 'whitespace callout body renders empty, not padding');
+  assert.match(body, /<span class="dg-badge dg-badge--success"><\/span>/, 'whitespace badge renders an empty span');
+  assert.match(body, /<span class="dg-badge dg-badge--success">active<\/span>/, 'typed badge text stays verbatim (trimmed)');
+  assert.match(body, /<blockquote class="dg-quote"><p><\/p>/, 'whitespace quote body renders an empty paragraph');
+  assert.match(body, /<blockquote class="dg-quote"><p>Ship early<\/p>/, 'typed quote body stays verbatim');
+  assert.match(body, /<p class="dg-callout-body"><\/p>/, 'whitespace callout body renders an empty paragraph');
+  assert.match(body, /<p class="dg-callout-body">Tip: pin deps\.<\/p>/, 'typed callout body stays verbatim (trimmed)');
+});
+
 test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
   // components.js renderStat: a delta string Number() can't parse and a
   // non-numeric progress value are silently dropped, progress is clamped into
