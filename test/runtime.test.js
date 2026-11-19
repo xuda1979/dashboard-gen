@@ -160,6 +160,48 @@ test('runtime escapes hostile chart labels instead of injecting markup', () => {
     'no raw markup survives');
 });
 
+test('runtime degrades structured (object/array) chart labels instead of spelling [object Object]', () => {
+  // A structured label cell ({ nested: 1 } or ["two"]) has no textual category:
+  // String() would fabricate a literal '[object Object]'/ 'two' reading into the
+  // x-axis ticks, bar tooltip and pie slice names, the same literal-fabrication
+  // class as 'true'/'NaN'. It must degrade like a nullish/blank label, leaving
+  // the real labels rendered.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: L\n        data:\n          - { label: a, series: { x: 10 } }\n      - type: chart\n        kind: bar\n        title: B\n        data:\n          - { label: a, series: { x: 5 } }\n      - type: chart\n        kind: pie\n        title: P\n        data:\n          - { label: a, series: { x: 7 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'L' },
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-1', 'data-chart-title': 'B' },
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-2', 'data-chart-title': 'P' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: { nested: 1 }, series: { x: 10 } },
+      { label: ['two'], series: { x: 8 } },
+      { label: 'Plain', series: { x: 12 } },
+    ],
+    'chart-1': [
+      { label: { x: 1 }, series: { x: 5 } },
+      { label: 'Ok', series: { x: 7 } },
+    ],
+    'chart-2': [{ label: { a: 1 }, series: { X: 10, Y: 5 } }],
+  });
+  for (const out of figureEls.map((f) => f.innerHTML)) {
+    assert.ok(!out.includes('[object Object]'),
+      'no literal [object Object] may appear in chart output');
+  }
+  const line = figureEls[0].innerHTML;
+  assert.ok(line.includes('>Plain</text>'), 'real label still renders as an x-axis tick');
+  assert.ok(!line.includes('>two</text>'), 'array label degrades instead of joining to a tick');
+  const bar = figureEls[1].innerHTML;
+  assert.ok(bar.includes('>Ok</text>'), 'real bar label still renders');
+  const pie = figureEls[2].innerHTML;
+  assert.ok(pie.includes('class="dg-slice"'), 'pie oneMap branch ignores the degraded label and still draws');
+  assert.ok(pie.includes('>X</span>') && pie.includes('>Y</span>'), 'slice names come from series keys, not the degraded label');
+});
+
 test('runtime compacts large y-axis ticks with k/M shorthand', () => {
   // fmt() renders ticks >= 1e3 with a k suffix and >= 1e6 with M; the line
   // chart's y-axis must surface those compacted labels so a 2.5k-value series
