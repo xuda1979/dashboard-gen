@@ -729,6 +729,90 @@ test('runtime draws negative bar values below a zero baseline', () => {
   assert.ok(geo[1].y + geo[1].h > geo[0].y + geo[0].h, 'negative bar extends below the positive bar');
 });
 
+test('runtime scales all-negative line data to fill the plot, not the unit seed', () => {
+  // The y-domain used to seed maxV at 1, so an all-negative series drew under a
+  // false +1 ceiling: the axis skewed upward (+4.1 top tick on -20/-30 data) and
+  // the line hugged the bottom. The domain must come from the data extents, with
+  // padding proportional to the real span.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Loss\n        data:\n          - { label: Jan, series: { l: -20 } }\n          - { label: Feb, series: { l: -30 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'Loss' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'Jan', series: { l: -20 } }, { label: 'Feb', series: { l: -30 } }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(!/NaN|Infinity/.test(out), 'line chart leaks no NaN/Infinity');
+  const d = /<path class="dg-series" d="([^"]+)"/.exec(out);
+  assert.ok(d, 'line chart produced a series path');
+  const ys = d[1].match(/-?\d+(\.\d+)?/g).map(Number).filter((_, i) => i % 2 === 1);
+  assert.strictEqual(ys.length, 2, 'one point per row');
+  // Plot area is y 22..300, axis spans -33..3: both points must land inside it
+  // and keep a spread that fills a substantial fraction of the 278px plot.
+  assert.ok(ys.every((y) => Number.isFinite(y) && y >= 22 && y <= 300), 'polyline stays inside the plot area');
+  assert.ok(Math.max(...ys) - Math.min(...ys) > 60, `line fills the plot span (spread ${(Math.max(...ys) - Math.min(...ys)).toFixed(1)}px)`);
+  assert.ok(ys[0] < ys[1], 'more negative data maps lower: axis is not inverted');
+  const ticks = out.match(/<text class="dg-axis"(?! dg-axis-x)[^>]*>(-?[\d.]+)<\/text>/g) || [];
+  const tickVals = ticks.map((t) => Number(/-?[\d.]+(?=<\/text>)/.exec(t)[0]));
+  assert.ok(Math.max(...tickVals) <= 5, `top tick hugs the padded data, not a unit dome (got ${Math.max(...tickVals)})`);
+});
+
+test('runtime scales all-negative bar data below a visible zero baseline', () => {
+  // Same unit-seed defect in barSvg: the +1 ceiling pushed the baseline to the
+  // top of the plot and left only slivers of the lower half for the bars. The
+  // domain must track the negative extent so bars fill the plot below a
+  // visible zero line.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: bar\n        title: Loss\n        data:\n          - { label: Jan, series: { p: -20 } }\n          - { label: Feb, series: { p: -30 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'Loss' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'Jan', series: { p: -20 } }, { label: 'Feb', series: { p: -30 } }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(!/NaN|Infinity/.test(out), 'bar chart leaks no NaN/Infinity');
+  const rects = out.match(/<rect class="dg-bar" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/g);
+  assert.strictEqual(rects ? rects.length : 0, 2, 'one bar per row');
+  const geo = [];
+  for (const r of rects) {
+    const m = /y="([\d.]+)" width="[\d.]+" height="([\d.]+)"/.exec(r);
+    const y = Number(m[1]), h = Number(m[2]);
+    assert.ok(h > 0, 'bar height stays positive');
+    assert.ok(y >= 0 && y + h <= 320, 'bar sits inside the svg viewBox');
+    geo.push({ y, h });
+  }
+  // The most-negative value (-30) maps lowest: its bar must be the tallest and
+  // fill a substantial share of the 258px plot instead of a bottom sliver.
+  assert.ok(geo[1].h > geo[0].h, 'more negative value yields a taller hanging bar');
+  assert.ok(Math.max(...geo.map((g) => g.h)) > 150, 'bar fills most of the plot below the baseline');
+  const ticks = out.match(/<text class="dg-axis"(?! dg-axis-x)[^>]*>(-?[\d.]+)<\/text>/g) || [];
+  const tickVals = ticks.map((t) => Number(/-?[\d.]+(?=<\/text>)/.exec(t)[0]));
+  assert.ok(Math.max(...tickVals) <= 10, `top tick hugs the padded data, not a unit dome (got ${Math.max(...tickVals)})`);
+});
+
+test('runtime renders sub-1 bar values proportionally instead of under a unit dome', () => {
+  // Previously barSvg ran Math.ceil on the padded top and the maxV=1 seed sat in
+  // the way, so [0.2, 0.3] rendered under a top tick of 2 with bars of ~6-26px
+  // squeezed into the bottom of the plot. Sub-1 magnitudes must keep the axis
+  // proportional to themselves.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: bar\n        title: Rates\n        data:\n          - { label: A, series: { r: 0.2 } }\n          - { label: B, series: { r: 0.3 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const { dom, figureEls } = makeDom([{ 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'Rates' }]);
+  runRuntime(code, dom, { 'chart-0': [{ label: 'A', series: { r: 0.2 } }, { label: 'B', series: { r: 0.3 } }] });
+  const out = figureEls[0].innerHTML;
+  assert.ok(!/NaN|Infinity/.test(out), 'bar chart leaks no NaN/Infinity');
+  const heights = out.match(/<rect class="dg-bar" [^>]*height="([\d.]+)"/g).map((r) => Number(/height="([\d.]+)"/.exec(r)[1]));
+  assert.strictEqual(heights.length, 2, 'one bar per row');
+  assert.ok(heights.every((h) => h > 100), `sub-1 bars fill the plot instead of a sliver (got ${heights.join(', ')})`);
+  assert.ok(heights[1] > heights[0], 'larger value renders a taller bar');
+  const ticks = out.match(/<text class="dg-axis"(?! dg-axis-x)[^>]*>(-?[\d.]+)<\/text>/g) || [];
+  const tickVals = ticks.map((t) => Number(/-?[\d.]+(?=<\/text>)/.exec(t)[0]));
+  assert.ok(Math.max(...tickVals) <= 0.5, `top tick stays proportional to sub-1 data (got ${Math.max(...tickVals)})`);
+});
+
 test('runtime draws one pie slice per series key in a single data row', () => {
   // README: pie accepts "a single row with a multi-key series: map (one slice
   // per series key)". The runtime must explode that one row into slices, not
