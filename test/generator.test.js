@@ -3795,6 +3795,68 @@ test('round-7: whitespace-only titles and remaining text slots degrade to empty,
   assert.match(body, /<div class="dg-tab-panel"><p class="dg-paragraph">real<\/p><\/div>/, 'typed tab content stays verbatim (trimmed)');
 });
 
+test('round-7b: per-item label slots trim padding and let a padded field fall through to its fallback', () => {
+  // The sweep covered standalone labels that render an item's identity (status
+  // name, timeline text, stat-list row label, heatmap row label, checklist
+  // text, footnote text). These keyed raw truthiness or normalized without
+  // trimming, so a padded string rendered literal spaces AND a padding-only
+  // `name`/`label` shadowed the typed fallback (`service`, `title`) into an
+  // empty cell. Whitespace is absent like blank: the slot trims, a typed field
+  // falls through when its sibling is padding-only, and an item whose identity
+  // is padding-only still degrades away entirely.
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [
+      { type: 'status', items: [
+        { name: '  svc1 ', state: 'ok' },
+        { name: '   ', service: 'svcSvc', state: 'ok' },
+        { name: '   ', state: 'ok' },
+      ]},
+      { type: 'timeline', items: [
+        { text: '  ev1 ', time: '09:00' },
+        { text: '   ', time: '10:00' },
+        '  ev3 ',
+      ]},
+      { type: 'stat-list', items: [
+        { label: '  lbl1 ', value: 5 },
+        { label: '   ', title: 'L2', value: 6 },
+        { label: '   ', title: '   ', value: 7 },
+        '  bare ',
+      ]},
+      { type: 'heatmap', columns: ['Mon'], rows: [
+        { label: '  r1 ', values: [1] },
+        { label: '   ', name: 'R2', values: [1] },
+        { label: '   ', values: [1] },
+      ]},
+      { type: 'checklist', items: [
+        { text: '  chk1 ', done: true },
+        '  chk2 ',
+        { text: '   ' },
+      ]},
+      { type: 'footnote', text: '  note  ', label: 'Src' },
+    ]}],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  // Per-item labels trim surrounding padding (typed text stays verbatim).
+  assert.match(body, /<span class="dg-status-name">svc1<\/span>/, 'padded status name trims');
+  assert.match(body, /<span class="dg-status-name">svcSvc<\/span>/, 'padding-only status name falls through to service');
+  assert.ok(!/<span class="dg-status-name">\s+<\/span>/.test(body), 'padding-only status name+service emits no padded name row');
+  assert.match(body, /<span class="dg-timeline-text">ev1<\/span>/, 'padded timeline text trims');
+  assert.match(body, /<span class="dg-timeline-text">ev3<\/span>/, 'padded bare timeline string trims');
+  assert.ok(!/<span class="dg-timeline-text">\s+<\/span>/.test(body), 'whitespace timeline text emits no padded entry');
+  assert.match(body, /<th scope="row">lbl1<\/th>/, 'padded stat-list label trims');
+  assert.match(body, /<th scope="row">L2<\/th>/, 'padding-only stat-list label falls through to title');
+  assert.match(body, /<th scope="row"><\/th>/, 'padding-only stat-list label+title renders an empty row header');
+  assert.match(body, /<th scope="row">bare<\/th>/, 'padded bare stat-list string trims');
+  assert.match(body, /<th scope="row">r1<\/th>/, 'padded heatmap row label trims');
+  assert.match(body, /<th scope="row">R2<\/th>/, 'padding-only heatmap label falls through to name');
+  assert.ok(!/<th scope="row">\s+<\/th>/.test(body), 'padding-only heatmap row label (no name) drops the row');
+  assert.match(body, /<span class="dg-checklist-text">chk1<\/span>/, 'padded checklist text trims');
+  assert.match(body, /<span class="dg-checklist-text">chk2<\/span>/, 'padded bare checklist string trims');
+  assert.ok(!/<span class="dg-checklist-text">\s+<\/span>/.test(body), 'whitespace checklist text emits no padded entry');
+  assert.match(body, /<aside class="dg-footnote" role="doc-footnote" aria-label="Src">note<\/aside>/, 'padded footnote text trims');
+});
+
 test('stat drops non-numeric delta/progress and clamps progress to 0-100', () => {
   // components.js renderStat: a delta string Number() can't parse and a
   // non-numeric progress value are silently dropped, progress is clamped into
