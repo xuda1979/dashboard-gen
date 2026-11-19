@@ -1517,6 +1517,61 @@ test('runtime skips nullish and blank chart cells as no reading, not zero', () =
   });
   assert.ok(figureEls[0].innerHTML.includes('class="dg-note"'), 'all-nullish line degrades to the no-data note');
   assert.ok(!figureEls[0].innerHTML.includes('<svg'), 'no hollow svg shell');
+
+  // bar analogue for boolean cells: a boolean is absent, not a reading —
+  // Number(true) === 1 would otherwise fabricate a bar on the plot
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'BoolBar' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: 5 } },
+      { label: 'Q2', series: { a: true } },
+      { label: 'Q3', series: { a: 15 } },
+    ],
+  });
+  const boolBarOut = figureEls[0].innerHTML;
+  assert.strictEqual((boolBarOut.match(/<rect class="dg-bar"/g) || []).length, 2, 'bar chart: the boolean cell renders no rect');
+  assert.ok(!/height="0/.test(boolBarOut), 'no zero-height placeholder bar for the boolean cell');
+
+  // an all-boolean bar series degrades to the no-data note
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'BoolBarAll' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: true } },
+      { label: 'Q2', series: { a: false } },
+    ],
+  });
+  assert.ok(figureEls[0].innerHTML.includes('class="dg-note"'), 'all-boolean bar degrades to the no-data note');
+  assert.ok(!figureEls[0].innerHTML.includes('<svg'), 'no hollow svg shell for an all-boolean bar series');
+
+  // pie oneMap rows: a boolean slice value is dropped, not a fabricated
+  // Number(true) === 1 wedge, and shares recompute over the surviving total
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'BoolPie' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Traffic', series: { Organic: 40, Direct: true, Referral: 35 } },
+    ],
+  });
+  const boolPieOut = figureEls[0].innerHTML;
+  assert.strictEqual((boolPieOut.match(/class="dg-slice"/g) || []).length, 2, 'pie chart: the boolean slice renders no wedge');
+  assert.ok(!boolPieOut.includes('>Direct</span>'), 'the boolean slice is absent from the legend');
+  assert.ok(boolPieOut.includes('Organic 53.3%'), 'shares recompute over the surviving positive total');
+
+  // an all-boolean pie degrades to the no-data note
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'BoolPieAll' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [{ label: 'T', series: { a: true, b: false } }],
+  });
+  assert.ok(figureEls[0].innerHTML.includes('No data to draw'), 'all-boolean pie shows the no-data note');
+  assert.ok(!figureEls[0].innerHTML.includes('<svg'), 'no hollow svg for an all-boolean pie');
+  assert.ok(!figureEls[0].innerHTML.includes('NaN'), 'no NaN leaks into the all-boolean pie');
 });
 test('runtime drops an unusable bar series but keeps its legend entry', () => {
   // The bar analogue of the line guard: a second series whose cells are all
