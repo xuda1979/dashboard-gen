@@ -6615,6 +6615,61 @@ test('table null/undefined cells render empty, never literal "null"/"undefined" 
   assert.ok(!/>undefined</.test(arrayRows), 'array rows leak no literal "undefined" text');
 });
 
+test('table non-finite numeric cells render empty, typed "Infinity" strings stay', () => {
+  // The project non-finite->absent convention extends to tables: numeric
+  // Infinity/-Infinity/NaN must degrade to an empty cell (like null/undefined)
+  // instead of spelling the literal word as cell text, on both table data
+  // shapes (array-of-arrays String() path and object union-of-keys path).
+  // A typed string value "Infinity" is data, not a number, and stays verbatim.
+  const arrayRows = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{
+        type: 'table',
+        header: false,
+        rows: [
+          ['num', Infinity],
+          ['nan', NaN],
+          ['neg', -Infinity],
+          ['str', 'Infinity'],
+          ['finite', 42],
+          ['missing', null],
+        ],
+      }],
+    }],
+  });
+  assert.match(
+    arrayRows,
+    /<tbody><tr><th scope="row">num<\/th><td><\/td><\/tr><tr><th scope="row">nan<\/th><td><\/td><\/tr><tr><th scope="row">neg<\/th><td><\/td><\/tr><tr><th scope="row">str<\/th><td>Infinity<\/td><\/tr><tr><th scope="row">finite<\/th><td>42<\/td><\/tr><tr><th scope="row">missing<\/th><td><\/td><\/tr><\/tbody>/,
+    'array rows degrade non-finite numbers to empty cells but keep typed strings'
+  );
+  assert.ok(!/>Infinity</.test(arrayRows.replace(/td>Infinity</, '')), 'no non-finite Infinity literal leaks into an array-table cell');
+  assert.ok(!/>NaN</.test(arrayRows), 'no NaN literal leaks into an array-table cell');
+  assert.ok(!/>-Infinity</.test(arrayRows), 'no -Infinity literal leaks into an array-table cell');
+
+  const objectRows = renderHtml({
+    title: 't',
+    sections: [{
+      content: [{
+        type: 'table',
+        rows: [
+          { name: 'api', v: Infinity },
+          { name: 'db', v: NaN },
+          { name: 'auth', v: -Infinity },
+          { name: 'redis', v: 2 },
+        ],
+      }],
+    }],
+  });
+  assert.match(
+    objectRows,
+    /<tbody><tr><td>api<\/td><td><\/td><\/tr><tr><td>db<\/td><td><\/td><\/tr><tr><td>auth<\/td><td><\/td><\/tr><tr><td>redis<\/td><td>2<\/td><\/tr><\/tbody>/,
+    'object rows degrade non-finite numbers to empty cells'
+  );
+  assert.ok(!/>Infinity</.test(objectRows), 'object rows leak no Infinity literal');
+  assert.ok(!/>NaN</.test(objectRows), 'object rows leak no NaN literal');
+});
+
 test('empty or absent table rows render a no-data note instead of a hollow table', () => {
   // An empty rows list has no header and no body, so a bare <table> with an
   // empty <tbody> (or nothing at all) would be an invisible hollow element.
