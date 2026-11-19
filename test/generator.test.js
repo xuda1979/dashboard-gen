@@ -2270,6 +2270,26 @@ test('sparkline drops nullish and blank entries instead of plotting fabricated z
     /<path class="dg-sparkline-line" d="M 0 ([\d.]+)L 100 ([\d.]+)"\/>/,
     'a boolean entry drops like a nullish/blank one, no fabricated low dip'
   );
+  // A non-finite numeric entry is absent too: isNaN(Infinity) === false would
+  // slide it past an isNaN-style guard, then Math.min/max spread a NaN span
+  // and every plotted y-coordinate goes NaN. sparklineValues gates on
+  // Number.isFinite, so Infinity/-Infinity/NaN entries drop like nullish ones
+  // and only the finite core plots.
+  const nonFinite = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: [1, Infinity, -Infinity, NaN, 5] }] }],
+  });
+  assert.match(
+    nonFinite,
+    /<path class="dg-sparkline-line" d="M 0 ([\d.]+)L 100 ([\d.]+)"\/>/,
+    'non-finite entries drop so the surviving 1 and 5 draw a two-point edge-to-edge line'
+  );
+  const allNonFinite = renderHtml({
+    title: 'sparkline',
+    sections: [{ content: [{ type: 'sparkline', data: [Infinity, -Infinity, NaN] }] }],
+  });
+  assert.match(allNonFinite, /<p class="dg-note">No data to draw\.<\/p>/, 'all-non-finite data shows the no-data note');
+  assert.ok(!allNonFinite.includes('class="dg-sparkline-svg"'), 'all-non-finite data renders no sparkline svg');
 });
 
 test('status renders a service-health list with the state spelled as text', () => {
@@ -2693,7 +2713,10 @@ test('progress and gauge treat nullish or blank values as absent, not zero', () 
   // value is absent: it degrades away exactly like a missing value. A real
   // zero still renders, numeric strings still coerce, and a nullish or blank
   // min/max falls back to the 0/100 defaults instead of corrupting or
-  // killing the range.
+  // killing the range. A non-finite numeric value or range bound degrades
+  // away too: isNaN(Infinity) === false slides Infinity past an isNaN-style
+  // guard, so renderProgress/renderGauge gate on Number.isFinite across the
+  // value and the min/max span.
   const html = renderHtml({
     title: 'empty-values',
     sections: [{ content: [
@@ -2704,6 +2727,9 @@ test('progress and gauge treat nullish or blank values as absent, not zero', () 
       { type: 'progress', label: 'Gauge empty', value: '' },
       { type: 'progress', label: 'Gauge blank', value: '  ' },
       { type: 'progress', label: 'Binary', value: true },
+      { type: 'progress', label: 'Inf value', value: Infinity },
+      { type: 'progress', label: 'Neath value', value: -Infinity },
+      { type: 'progress', label: 'Nan value', value: NaN },
       { type: 'progress', label: 'Zero', value: 0 },
       { type: 'progress', label: 'Numeric string', value: '45' },
       { type: 'gauge', label: 'Gauge zero', value: 0 },
@@ -2712,12 +2738,18 @@ test('progress and gauge treat nullish or blank values as absent, not zero', () 
       { type: 'gauge', label: 'Blank max', value: 5, max: '  ' },
       { type: 'gauge', label: 'True min', value: 5, min: true },
       { type: 'gauge', label: 'False max', value: 5, max: false },
+      { type: 'gauge', label: 'Inf value', value: Infinity },
+      { type: 'gauge', label: 'Nan value', value: NaN },
+      { type: 'gauge', label: 'Inf max', value: 5, max: Infinity },
+      { type: 'gauge', label: 'Nan max', value: 5, max: NaN },
+      { type: 'gauge', label: 'Inf min', value: 5, min: Infinity },
+      { type: 'gauge', label: 'Nan min', value: 5, min: NaN },
     ] }],
   });
   const body = html.slice(html.indexOf('<main'));
   const barRows = body.match(/<div class="dg-progress-value">([^<]*)<\/div>/g) || [];
-  assert.deepEqual(barRows, ['<div class="dg-progress-value">0%</div>', '<div class="dg-progress-value">45%</div>'], 'nullish/blank/boolean progress values render no bar while a real zero and numeric strings still do');
-  assert.strictEqual((body.match(/class="dg-figure dg-gauge"/g) || []).length, 6, 'nullish/blank/boolean gauge values render no gauge, only real values do');
+  assert.deepEqual(barRows, ['<div class="dg-progress-value">0%</div>', '<div class="dg-progress-value">45%</div>'], 'nullish/blank/boolean/non-finite progress values render no bar while a real zero and numeric strings still do');
+  assert.strictEqual((body.match(/class="dg-figure dg-gauge"/g) || []).length, 6, 'nullish/blank/boolean/non-finite gauge values or range bounds render no gauge, only real values do');
   assert.match(body, /aria-label="Gauge zero: 0"/, 'a real zero value still renders as a gauge');
   assert.match(body, /aria-label="Null min: 5"/, 'a nullish min falls back to the default range');
   assert.match(body, /aria-label="Null max: 5"/, 'a nullish max falls back to the default range instead of killing the gauge');
