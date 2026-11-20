@@ -4445,6 +4445,54 @@ test('round-14: structured values (object/array) in text-labels degrade instead 
   assert.ok(!body.includes('a,b'), 'no array-joined text fabrication anywhere');
 });
 
+test('round-15: code-array lines normalize per element, so structured/boolean lines degrade instead of spelling into the snippet', () => {
+  // Every other multi-item surface maps its elements through normalizeText, but
+  // renderCode's array form did a raw `c.code.join('\n')`: an object element
+  // fabricated literal "[object Object]", an array joined "b,c", and a raw
+  // boolean spelled "true" into the <code> body. Normalizing per element keeps
+  // the blank-line convention (a nullish element contributes a blank line)
+  // while degrading structured/boolean elements like every other text slot.
+  const html = renderHtml({
+    title: 'code15',
+    sections: [{ content: [
+      { type: 'code', code: ['a', { b: 1 }, 'c'] },
+      { type: 'code', code: ['a', ['x', 'y']] },
+      { type: 'code', code: ['a', true, 'b'] },
+      { type: 'code', code: ['a', null, 'b'] },
+      { type: 'code', code: ['a', 0, 'b'] },
+    ]}],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  assert.ok(
+    body.includes('<code class="dg-code-body">a\n\nc</code>'),
+    'object code line degrades to a blank line, real neighbors stay'
+  );
+  assert.ok(
+    body.includes('<code class="dg-code-body">a\n</code>'),
+    'array code line degrades to a blank line'
+  );
+  assert.ok(!body.includes('[object Object]'), 'no object gloss in code bodies');
+  assert.ok(!body.includes('x,y'), 'no array-join in code bodies');
+  // Scope the boolean check to the code bodies themselves: the bundled chart
+  // script legitimately contains the word "true" in comments/control flow, so
+  // a whole-body scan would false-positive. The boolean element must degrade
+  // to a blank line inside the <code> block, never spell itself as text.
+  const codeBodies = [...body.matchAll(/<code class="dg-code-body">([\s\S]*?)<\/code>/g)].map(m => m[1]);
+  assert.ok(codeBodies.length >= 4, 'all code blocks present');
+  assert.ok(
+    codeBodies.every(codeBody => !codeBody.includes('true')),
+    'raw boolean true never spells itself into a code body'
+  );
+  assert.ok(
+    body.includes('<code class="dg-code-body">a\n\nb</code>'),
+    'boolean code line degrades to a blank like a nullish one'
+  );
+  assert.ok(
+    body.includes('<code class="dg-code-body">a\n0\nb</code>'),
+    'finite 0 code line stays verbatim'
+  );
+});
+
 test('bare-label surfaces treat non-finite numeric values as absent, not literal text', () => {
   // components.js: bare (non-object) items that reach String() before
   // normalizeText bypass the central guard — isNaN(Infinity) === false slips
