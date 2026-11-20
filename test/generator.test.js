@@ -4493,6 +4493,77 @@ test('round-15: code-array lines normalize per element, so structured/boolean li
   );
 });
 
+test('round-16: structured values in build-time numeric readings (gauge/progress/heatmap/sparkline) degrade instead of fabricating a reading', () => {
+  // Bare Number(v) coercion fabricates readings from never-provided values:
+  // Number([50]) === 50 (gauge throw), Number(['50']) === 50 (progress
+  // percent), Number([4]) === 4 (heatmap intensity cell), Number([5]) === 5
+  // (sparkline point). A structured value is absent data, so the figure must
+  // degrade away exactly as a nullish one does — no full-scale gauge, no
+  // 50% bar, no lit cell, no plotted point.
+  const missing = renderHtml({
+    title: 'r16',
+    sections: [{ content: [
+      { type: 'gauge', value: [50], min: 0, max: 100 },
+      { type: 'gauge', value: { a: 1 }, min: 0, max: 100 },
+      { type: 'progress', value: ['51'] },
+      { type: 'progress', value: [{ pct: 51 }] },
+      { type: 'heatmap', title: 'h', columns: ['a', 'b'], rows: [
+        { label: 'r', values: [3, [4]] },
+        { label: 's', values: [3, { a: 1 }] },
+      ] },
+      { type: 'sparkline', title: 'sp', data: [[2024, [7]]] },
+      { type: 'sparkline', title: 'sp2', data: [{ a: 1 }] },
+    ]}],
+  });
+  const body = missing.slice(missing.indexOf('<main'));
+  assert.ok(!body.includes('dg-gauge'), 'array gauge value degrades the figure away');
+  assert.ok(!body.includes('aria-label="50"'), 'no gauged 50 readout from array value');
+  assert.ok(!body.includes('50%'), 'no 50% progress bar from string-in-array value');
+  assert.ok(!body.includes('dg-progress'), 'object progress value degrades the bar away');
+  assert.ok(!body.includes('aria-label="51%"'), 'no 51% readout from object progress value');
+  assert.ok(!body.includes('>4<'), 'array heatmap cell value renders no 4 reading');
+  const l0Cells = [...body.matchAll(/dg-heatmap-cell--l0">([\s\S]*?)<\/td>/g)].map(m => m[1]);
+  assert.ok(l0Cells.length >= 2, 'structured heatmap cells degrade to muted l0 cells');
+  assert.ok(l0Cells.every(t => t === '·'), 'structured cells spell the muted dot, never a fabricated number');
+  assert.ok(!body.includes('class="dg-sparkline-svg"'), 'structured sparkline rows plot no fabricated point');
+
+  // Plain-object values (not arrays) must degrade the same way. And the
+  // control path is untouched: finite numbers stay verbatim, including 0.
+  const objectOnly = renderHtml({
+    title: 'r16b',
+    sections: [{ content: [
+      { type: 'gauge', value: { v: 50 }, min: 0, max: 100 },
+      { type: 'progress', value: { v: 50 } },
+      { type: 'heatmap', title: 'h', columns: ['a'], rows: [{ label: 'r', values: [{ x: 1 }] }] },
+    ]}],
+  });
+  const body2 = objectOnly.slice(objectOnly.indexOf('<main'));
+  assert.ok(!body2.includes('dg-gauge'), 'object gauge value degrades the figure away');
+  assert.ok(!body2.includes('dg-progress'), 'object progress value degrades the bar away');
+  assert.ok(!body2.includes('>1<'), 'object heatmap cell value renders no 1');
+  assert.ok(!body2.includes('[object Object]'), 'no object gloss from structured numeric slots');
+
+  const control = renderHtml({
+    title: 'r16c',
+    sections: [{ content: [
+      { type: 'gauge', value: 0, min: 0, max: 100 },
+      { type: 'gauge', value: 42, min: 0, max: 100 },
+      { type: 'progress', value: 0 },
+      { type: 'progress', value: 25 },
+      { type: 'heatmap', title: 'h', columns: ['a', 'b'], rows: [{ label: 'r', values: [0, 2] }] },
+      { type: 'sparkline', title: 'sp', data: [0, 8] },
+    ]}],
+  });
+  const body3 = control.slice(control.indexOf('<main'));
+  assert.match(body3, /aria-label="0"/, 'finite gauge value 0 renders verbatim, not degraded');
+  assert.match(body3, /aria-label="42"/, 'finite gauge value 42 renders');
+  assert.match(body3, /aria-label="0%"/, 'finite progress value 0 renders verbatim');
+  assert.match(body3, /aria-label="25%"/, 'finite progress value 25 renders');
+  assert.match(body3, />0</, 'finite heatmap value 0 renders verbatim');
+  assert.match(body3, /class="dg-heatmap-cell dg-heatmap-cell--l(\d)">2<\/td>/, 'finite heatmap value 2 plots a lit cell');
+  assert.ok(body3.includes('class="dg-sparkline-svg"'), 'finite sparkline values still plot');
+});
+
 test('bare-label surfaces treat non-finite numeric values as absent, not literal text', () => {
   // components.js: bare (non-object) items that reach String() before
   // normalizeText bypass the central guard — isNaN(Infinity) === false slips
