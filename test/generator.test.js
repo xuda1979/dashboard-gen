@@ -7716,6 +7716,78 @@ test('grid structured columns value is absent like a blank one, not a fabricated
   ], 'array and object columns values degrade to the fluid auto-fill layout; a finite number still selects the fixed grid');
 });
 
+test('round-19: finite 0 in details/tabs text bodies and section titles renders verbatim instead of falling back', () => {
+  // The round-13 normalize-then-guard sweep covered component text slots but
+  // left three raw falsy gates behind — the exact same bug class (a falsy guard
+  // eats a legitimately typed finite 0 before normalizeText can preserve it):
+  // renderDetails and renderTabs gated their bare-text body on `c.text` /
+  // `tab.text`, so text: 0 fabricated "No content."; the section-title path
+  // (sectionAnchors/sectionTitle/renderToc) gated on `!s.title`, so a section
+  // titled 0 got no heading, no `s-0` anchor, and no toc entry — while the
+  // auto-nav (which has always used `s.title != null`) still published a "0"
+  // link pointing at a dead "#". Now 0 renders verbatim everywhere: details and
+  // tabs panes show a "0" paragraph, and a titled-0 section gets a real
+  // `id="s-0"` heading plus real toc/nav targets. Whitespace-only titles and
+  // missing body text still degrade (No content.) exactly as before.
+  const html = renderHtml({
+    title: 'zero19',
+    sections: [
+      { title: 0, content: [
+        { type: 'details', summary: 'D', text: 0 },
+        { type: 'tabs', tabs: [{ label: 'T', text: 0 }] },
+      ]},
+      { title: 'Real', content: [
+        { type: 'paragraph', text: 'real body' },
+        { type: 'toc', label: 'x' },
+        { type: 'details' },
+        { type: 'tabs', tabs: [{}] },
+      ]},
+      { title: '   ', content: [{ type: 'paragraph', text: 'blank title' }] },
+    ],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  assert.match(
+    body,
+    /<summary class="dg-details-summary">D<\/summary>\n<div class="dg-details-body"><p class="dg-paragraph">0<\/p><\/div>/,
+    'details text 0 renders a 0 paragraph, never the No content fallback'
+  );
+  assert.match(
+    body,
+    /<label class="dg-tab-label" for="dg-tabs-\d+-0">T<\/label>\n<div class="dg-tab-panel"><p class="dg-paragraph">0<\/p><\/div>/,
+    'tabs text 0 renders a 0 paragraph, never the No content fallback'
+  );
+  assert.match(
+    body,
+    /<h2 class="dg-section-title" id="s-0">0<\/h2>/,
+    'a section titled 0 renders a heading carrying the real s-0 anchor'
+  );
+  assert.match(
+    body,
+    /<h2 class="dg-section-title" id="s-real">Real<\/h2>/,
+    'the finite-title neighbor heading still renders'
+  );
+  // Missing body text still falls back to the documented note.
+  assert.match(
+    body,
+    /<summary class="dg-details-summary">Details<\/summary>\n<div class="dg-details-body"><p class="dg-paragraph">No content\.<\/p><\/div>/,
+    'a details with no text still renders the No content fallback'
+  );
+  assert.match(
+    body,
+    /<label class="dg-tab-label" for="dg-tabs-\d+-0">Tab 1<\/label>\n<div class="dg-tab-panel"><p class="dg-paragraph">No content\.<\/p>/,
+    'an object tab with no text still renders the No content fallback'
+  );
+  // The toc (placed in the Real section) lists the titled-0 section first
+  // (pointing at s-0) and the Real section, skipping the whitespace-only one.
+  const toc = html.match(/<nav class="dg-toc" aria-label="x"><ul>(.*?)<\/ul><\/nav>/s);
+  assert.ok(toc, 'a toc block renders when a section is titled');
+  assert.match(
+    toc[1],
+    /^<li><a class="dg-toc-link" href="#s-0">0<\/a><\/li><li><a class="dg-toc-link" href="#s-real">Real<\/a><\/li>$/,
+    'the toc lists the titled-0 section first, pointing at s-0, and skips the whitespace-only one'
+  );
+});
+
 test('quote component renders text with optional cite footer', () => {
   const html = renderHtml({
     title: 't',
