@@ -7835,6 +7835,48 @@ test('chart dataId routes through normalizeAttr so structured/boolean ids degrad
   );
 });
 
+test('round-21: structured headline levels degrade to h2 and a finite paragraph href 0 links verbatim', () => {
+  // The headline level slot ran `String(c.level || '')` against /^[1-6]$/, so a
+  // structured array [3] fabricated an <h3> from a never-provided value while a
+  // raw boolean spelled 'true'. Routing the slot through normalizeText keeps
+  // finite integers and typed digit strings verbatim and degrades booleans,
+  // objects and arrays to the documented h2 fallback. The paragraph inline-link
+  // trigger used a raw `c.href ||` guard that ate a finite 0 (rendering the
+  // direct { href: 0 } form as a plain paragraph) even though the object form
+  // `{ link: { href: 0 } }` survived — the address slot must treat 0 as verbatim
+  // in both forms while still degrading booleans/objects/arrays/whitespace away.
+  const html = renderHtml({
+    title: 'round21',
+    sections: [{ content: [
+      { type: 'headline', text: 'A', level: 3 },
+      { type: 'headline', text: 'B', level: '4' },
+      { type: 'headline', text: 'C', level: [3] },
+      { type: 'headline', text: 'D', level: { a: 1 } },
+      { type: 'headline', text: 'E', level: true },
+      { type: 'headline', text: 'F', level: 0 },
+      { type: 'headline', text: 'G', level: 9 },
+      { type: 'headline', text: 'H' },
+      { type: 'paragraph', text: 'P1', href: 0 },
+      { type: 'paragraph', text: 'P2', link: { href: 0 } },
+      { type: 'paragraph', text: 'P3', href: '   ' },
+      { type: 'paragraph', text: 'P4', href: ['x'] },
+      { type: 'paragraph', text: 'P5' },
+    ] }],
+  });
+  const body = html.slice(html.indexOf('<main'), html.indexOf('</main>') + 7);
+  assert.match(body, /<h3 class="dg-headline dg-h3">A<\/h3>/, 'a finite level 3 keeps its h3');
+  assert.match(body, /<h4 class="dg-headline dg-h4">B<\/h4>/, 'a typed string "4" keeps its h4');
+  for (const letter of ['C', 'D', 'E', 'F', 'G', 'H']) {
+    assert.match(body, new RegExp(`<h2 class="dg-headline dg-h2">${letter}<\\/h2>`),
+      `level ${JSON.stringify(letter === 'C' ? [3] : letter === 'D' ? { a: 1 } : letter === 'E' ? true : letter === 'F' ? 0 : letter === 'G' ? 9 : undefined)} degrades to the h2 default`);
+  }
+  assert.match(body, /<a href="0" class="dg-link">0<\/a>/, 'a finite direct href 0 links verbatim');
+  assert.match(body, /<p class="dg-paragraph">P2 <a href="0" class="dg-link">0<\/a><\/p>/, 'the object-form link href 0 links verbatim too, so both forms agree');
+  assert.match(body, /<p class="dg-paragraph">P3<\/p>/, 'a whitespace-only paragraph href degrades to a plain paragraph');
+  assert.match(body, /<p class="dg-paragraph">P4<\/p>/, 'a structured paragraph href degrades to a plain paragraph');
+  assert.match(body, /<p class="dg-paragraph">P5<\/p>/, 'a missing paragraph href stays a plain paragraph');
+});
+
 test('quote component renders text with optional cite footer', () => {
   const html = renderHtml({
     title: 't',
