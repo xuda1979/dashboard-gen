@@ -1866,6 +1866,70 @@ test('runtime skips nullish and blank chart cells as no reading, not zero', () =
   assert.strictEqual((strPieRowOut.match(/class="dg-slice"/g) || []).length, 2, 'numeric-string pie rows still render wedges');
   assert.ok(strPieRowOut.includes('Organic 53.3%'), 'numeric-string shares compute over the coerced total');
 });
+test('runtime rescales finite-but-astronomical magnitudes so coordinates and ticks stay real', () => {
+  // A pair of finite values near the double-precision ceiling overflow the
+  // domain (maxV - minV / the padding step / the pie total) into Infinity, and
+  // an Infinity domain would spill Infinity/NaN literals into every y
+  // coordinate, grid line, axis tick and slice angle. The division-scaling
+  // guard reduces such a domain to a common finite scale on one path; normal
+  // data is not scaled and renders byte-identically.
+  const html = buildFromSource(
+    'title: t\nsections:\n  - content:\n      - type: chart\n        kind: line\n        title: Solo\n        data:\n          - { label: Only, series: { t: 1 } }',
+    'x.yaml'
+  );
+  const code = extractRuntime(html);
+  const M = Number.MAX_VALUE;
+
+  // line, mixed signs (maxV - minV and pad both overflow)
+  let { dom, figureEls } = makeDom([
+    { 'data-chart-type': 'line', 'data-chart-data': 'chart-0', 'data-chart-title': 'AstroLine' },
+  ]);
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'a', series: { v: M } },
+      { label: 'b', series: { v: -M } },
+    ],
+  });
+  const astroLineOut = figureEls[0].innerHTML;
+  assert.ok(astroLineOut.includes('<svg'), 'astronomical line still produces an svg');
+  assert.ok(!/NaN|Infinity/.test(astroLineOut), 'astronomical line leaks no NaN/Infinity into coordinates or ticks');
+  const astroLineYs = /<path class="dg-series" d="([^"]+)"/.exec(astroLineOut);
+  assert.ok(astroLineYs, 'astronomical line produced a series path');
+  const coords = astroLineYs[1].match(/-?\d+(?:\.\d+)?/g).map(Number);
+  const ys = coords.filter((_, i) => i % 2 === 1);
+  assert.strictEqual(ys.length, 2, 'one point per row');
+  assert.ok(ys.every(Number.isFinite), 'every astronomical-line y stays finite');
+
+  // bar (same-sign span and padTop overflow)
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'bar', 'data-chart-data': 'chart-0', 'data-chart-title': 'AstroBar' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Q1', series: { a: M } },
+      { label: 'Q2', series: { a: M - Math.pow(2, 100) } },
+    ],
+  });
+  const astroBarOut = figureEls[0].innerHTML;
+  assert.strictEqual((astroBarOut.match(/<rect class="dg-bar"/g) || []).length, 2, 'astronomical bar still renders both rects');
+  assert.ok(!/NaN|Infinity/.test(astroBarOut), 'astronomical bar leaks no NaN/Infinity');
+  assert.ok(!/<rect class="dg-bar"[^>]*NaN|Infinity/.test(astroBarOut), 'astronomical rects carry finite geometry');
+
+  // pie: the total of two near-ceiling values overflows to Infinity
+  ({ dom, figureEls } = makeDom([
+    { 'data-chart-type': 'pie', 'data-chart-data': 'chart-0', 'data-chart-title': 'AstroPie' },
+  ]));
+  runRuntime(code, dom, {
+    'chart-0': [
+      { label: 'Organic', series: { v: M } },
+      { label: 'Direct', series: { v: M } },
+    ],
+  });
+  const astroPieOut = figureEls[0].innerHTML;
+  assert.strictEqual((astroPieOut.match(/class="dg-slice"/g) || []).length, 2, 'astronomical pie still renders both wedges');
+  assert.ok(!/NaN|Infinity/.test(astroPieOut), 'astronomical pie leaks no NaN/Infinity (shares and angles stay real)');
+  assert.ok(!/dg-label[^>]*NaN|Infinity/.test(astroPieOut), 'astronomical pie labels carry finite percentages');
+});
 test('runtime drops an unusable bar series but keeps its legend entry', () => {
   // The bar analogue of the line guard: a second series whose cells are all
   // non-numeric must render no rect at all — not a NaN-height bar, not a
