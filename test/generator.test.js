@@ -7689,6 +7689,33 @@ test('grid blank or non-positive columns falls back to the fluid auto-fill layou
   assert.ok(!/data-grid-cols="1"/.test(body), 'a boolean columns never fabricates a fixed 1-column grid hook');
 });
 
+test('grid structured columns value is absent like a blank one, not a fabricated repeat count', () => {
+  // Round-18: the fixed-grid branch guarded only nullish/boolean/blank, so a
+  // structured `columns` slipped through and Number([3]) === 3 fabricated a
+  // fixed repeat(3, ...) grid from an array the author never meant as a count
+  // — the same structured-reading leak the round-16/17 object guards closed
+  // in gauge/progress/heatmap/sparkline/stat-progress. columnWidth was already
+  // type-safe (usable-where accepts only numbers and unit strings), columns
+  // needed the object branch explicitly. A structured value is absent: it
+  // degrades to the fluid auto-fill layout, exactly like null/blank/boolean.
+  // A finite positive number still selects the fixed grid.
+  const html = renderHtml({
+    title: 't',
+    sections: [{ content: [
+      { type: 'grid', columns: [3], items: [] },
+      { type: 'grid', columns: { a: 1 }, items: [] },
+      { type: 'grid', columns: 3, items: [] },
+    ] }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  const styles = body.match(/grid-template-columns: (repeat\([^;]+)\);/g) || [];
+  assert.deepEqual(styles, [
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));',
+    'grid-template-columns: repeat(3, minmax(0, 1fr));',
+  ], 'array and object columns values degrade to the fluid auto-fill layout; a finite number still selects the fixed grid');
+});
+
 test('quote component renders text with optional cite footer', () => {
   const html = renderHtml({
     title: 't',
