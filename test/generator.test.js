@@ -4239,6 +4239,36 @@ test('stat progress strip treats nullish or blank values as absent, not a fabric
   ], 'blank, boolean and non-finite progress values render no strip; a real zero and numeric strings still do');
 });
 
+test('stat progress strip drops structured values as absent, not a fabricated percentage', () => {
+  // Send the round-16 object guard through the remaining reading slot
+  // renderStat owned: the strip gates on own-guard truthiness, so a raw
+  // progress array like [50] slipped past (not nullish/boolean/blank) and
+  // Number([50]) === 50 fabricated a 50% strip from data the author never
+  // meant as a percentage. A structured value is absent exactly like a
+  // nullish or blank one; a finite number still warrants its strip.
+  const html = renderHtml({
+    title: 'stats',
+    sections: [{
+      content: [
+        { type: 'stat', label: 'Array', value: '1', progress: [50] },
+        { type: 'stat', label: 'Object', value: '2', progress: { a: 1 } },
+        { type: 'stat', label: 'Numeric', value: '3', progress: 40 },
+      ],
+    }],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  const strips = body.match(/class="dg-stat-progress-fill[^"]*" style="width:([\d.]+)%"/g) || [];
+  assert.deepEqual(strips, [
+    'class="dg-stat-progress-fill dg-stat-progress-fill--primary" style="width:40%"',
+  ], 'array and object progress values render no strip; a finite number still does');
+  const labels = html.slice(html.indexOf('<main')).match(/class="dg-stat"[^>]*aria-label="([^"]+)"/g) || [];
+  assert.deepEqual(
+    labels.map((l) => l.match(/aria-label="([^"]+)"/)[1]),
+    ['Array: 1', 'Object: 2', 'Numeric: 3, 40%'],
+    'a stripped structured progress leaves the name as plain figure, never a stale percentage; the finite control still names its strip'
+  );
+});
+
 test('stat and stat-list drop blank-string deltas as absent, not a fabricated 0', () => {
   // parseDelta (components.js:136): the null guard dropped null but let ''
   // and '   ' through, where Number('') === 0 fabricated a "0" trend chip
