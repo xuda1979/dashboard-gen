@@ -4396,6 +4396,55 @@ test('round-13: finite 0 stays verbatim in every text slot, including falsy-guar
   assert.ok(!body.includes('[object Object]'), 'no grid shorthand falls through to a literal [object Object]');
 });
 
+test('round-14: structured values (object/array) in text-labels degrade instead of spelling [object Object]', () => {
+  // The normalize-nullish/boolean/non-finite guards and the bare-ternary inline
+  // checks that mirror them all bypassed `typeof x === 'object'`, so a plain
+  // object survived to String() and fabricated literal "[object Object]" while
+  // an array fabricated comma-joined text — the same never-provided-value class
+  // as a boolean or NaN, but spelled out on screen. Text-field objects are
+  // extracted to `.text` before these slots, so any surviving object is always
+  // a never-provided value and must degrade to absent output like every other
+  // absent one.
+  const html = renderHtml({
+    title: 'struct14',
+    sections: [{ content: [
+      { type: 'paragraph', text: { a: 1 } },
+      { type: 'headline', text: ['a', 'b'] },
+      { type: 'card', title: { a: 1 }, text: 'clean' },
+      { type: 'badge', text: { a: 1 } },
+      { type: 'quote', text: { a: 1 } },
+      { type: 'callout', title: ['x'], text: 'clean' },
+      { type: 'kv', items: [{ key: 'K', value: { a: 1 } }] },
+      { type: 'def-list', items: [{ key: 'K2', value: ['x'] }] },
+      { type: 'table', rows: [['H'], [{ a: 1 }]] },
+      { type: 'grid', columns: 2, items: [{ a: 1 }, 'real'] },
+      { type: 'stat', label: 'S', value: { a: 1 } },
+      { type: 'chart', kind: 'line', title: 'c', data: [{ label: 'a', series: { x: 1 } }], start: { a: 1 } },
+    ]}],
+  });
+  const body = html.slice(html.indexOf('<main'));
+  assert.match(body, /<p class="dg-paragraph"><\/p>/, 'paragraph object degrades to an empty paragraph');
+  assert.match(body, /<h2 class="dg-headline dg-h2"><\/h2>/, 'headline array degrades to an empty headline');
+  assert.match(body, /<div class="dg-card">clean<\/div>/, 'card object title degrades, real body stays');
+  assert.match(body, /<span class="dg-badge dg-badge--neutral"><\/span>/, 'badge object degrades to an empty badge');
+  assert.match(body, /<blockquote class="dg-quote"><p><\/p>/, 'quote object degrades to an empty quote body');
+  assert.match(
+    body,
+    /<div class="dg-callout dg-callout--primary"><p class="dg-callout-body">clean<\/p>/,
+    'callout array title degrades while the real body stays; no bogus aria-label from a degraded title'
+  );
+  assert.ok(!body.includes('class="dg-callout dg-callout--primary" role="note" aria-label='), 'no aria-label is fabricated from a degraded callout title');
+  assert.match(body, /<div class="dg-kv-row"><dt>K<\/dt><dd><\/dd>/, 'kv object value degrades to an empty dd');
+  assert.match(body, /<div class="dg-def-list-row"><dt>K2<\/dt><dd><\/dd>/, 'def-list array value degrades to an empty dd');
+  assert.match(body, /<td><\/td>/, 'table array-row cell degrades to an empty td');
+  assert.ok(body.includes('<div class="dg-cell">real</div>'), 'grid real bare cell still renders');
+  assert.ok(!body.includes('<div class="dg-cell">[object Object]</div>'), 'grid object cell never spells [object Object]');
+  assert.match(body, /<div class="dg-stat-value"><\/div>/, 'stat object value degrades to an empty value');
+  assert.ok(!body.includes('data-chart-start="'), 'chart object start is absent, not a literal baseline attribute');
+  assert.ok(!body.includes('[object Object]'), 'no [object Object] fabrication anywhere');
+  assert.ok(!body.includes('a,b'), 'no array-joined text fabrication anywhere');
+});
+
 test('bare-label surfaces treat non-finite numeric values as absent, not literal text', () => {
   // components.js: bare (non-object) items that reach String() before
   // normalizeText bypass the central guard — isNaN(Infinity) === false slips
