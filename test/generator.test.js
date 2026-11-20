@@ -7788,6 +7788,53 @@ test('round-19: finite 0 in details/tabs text bodies and section titles renders 
   );
 });
 
+test('chart dataId routes through normalizeAttr so structured/boolean ids degrade instead of fabricating keys', () => {
+  // Round 20: the chart dataId slot bypassed normalizeAttr at both sites — the
+  // render shell (components.js) and the store collect pass (render.js). The
+  // raw `c.dataId || 'chart-N'` short-circuit let a truthy boolean/object/array
+  // through, so String() fabricated "true" / "[object Object]" / "x,y" into
+  // both data-chart-data and the store key, and whitespace-only ids reached the
+  // attribute as literal spaces. A finite dataId of 0 was also eaten by the ||
+  // into the auto key. Now the identical normalizeAttr guard runs at both sites:
+  // finite 0 stays verbatim as "0", and every degraded shape (boolean, object,
+  // array, whitespace-only, never-provided) falls back to a consistent auto
+  // chart-N key in BOTH the figure attribute and window.__DG_DATA__ — the shell
+  // and the store must agree so hydrated charts find their rows.
+  const single = renderHtml({
+    title: 'zero20',
+    sections: [
+      { title: 'Zero', content: [
+        { type: 'chart', kind: 'bar', dataId: 0, data: [[1, 2]] },
+      ]},
+      { title: 'Degraded', content: [
+        { type: 'chart', kind: 'line', dataId: true, data: [[1, 2]] },
+        { type: 'chart', kind: 'bar', dataId: { a: 1 }, data: [[3, 4]] },
+        { type: 'chart', kind: 'pie', dataId: ['x', 'y'], data: [[5, 6]] },
+        { type: 'chart', kind: 'line', dataId: '   ', data: [[7, 8]] },
+        { type: 'chart', kind: 'bar', data: [[9, 10]] },
+      ]},
+    ],
+  });
+  const attrs = [...single.matchAll(/data-chart-data="([^"]*)"/g)].map((m) => m[1]);
+  assert.deepEqual(
+    attrs,
+    ['0', 'chart-0', 'chart-1', 'chart-2', 'chart-3', 'chart-4'],
+    'finite dataId 0 stays verbatim; boolean/object/array/whitespace/never-provided dataIds fall back to sequential auto keys'
+  );
+  const storeScript = single.match(/window\.__DG_DATA__ = (\{.*?\});/s);
+  assert.ok(storeScript, 'the data store script is emitted');
+  const store = JSON.parse(storeScript[1]);
+  assert.ok('0' in store, "the store carries the verbatim '0' key for the finite dataId");
+  ['chart-0', 'chart-1', 'chart-2', 'chart-3', 'chart-4'].forEach((k) => {
+    assert.ok(k in store, `the store carries the auto key ${k}`);
+  });
+  assert.deepEqual(
+    Object.keys(store).sort(),
+    ['0', 'chart-0', 'chart-1', 'chart-2', 'chart-3', 'chart-4'],
+    'the store keys agree exactly with the emitted data-chart-data ids'
+  );
+});
+
 test('quote component renders text with optional cite footer', () => {
   const html = renderHtml({
     title: 't',
